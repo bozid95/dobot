@@ -420,9 +420,9 @@ export default async function handler(
       if (tf15m) {
         let crossText =
           tf15m.crossType === "ema7-ema99" ? "EMA7/EMA99" : "EMA7/EMA25";
-        let msg15m = `${
+        let msgUnified = `${
           tf15m.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
-        } (TF 15M)\nPair: ${symbol}\nTimeframe: 15m\nHarga Terakhir: ${
+        }\nPair: ${symbol}\nTimeframe: 15m\nHarga Terakhir: ${
           tf15m.currClose
         }\nEMA7: ${tf15m.currEma7?.toFixed(
           4
@@ -434,27 +434,28 @@ export default async function handler(
               " (" +
               tf15m.percent799?.toFixed(2) +
               "%)"
-            : (tf15m.currEma7 - tf15m.currEma25)?.toFixed(4)
+            : tf15m.dist725?.toFixed(4) +
+              " (" +
+              tf15m.percent725?.toFixed(2) +
+              "%)"
         }\nVolume: ${tf15m.volume?.toFixed(2)}\nRSI: ${tf15m.rsi?.toFixed(
           2
         )}\nKelengkungan EMA7: ${
           tf15m.curvature
-        }\nJarak Harga ke ${crossText}: ${tf15m.crossDistance?.toFixed(
-          6
-        )}\nTP: ${tf15m.tp?.toFixed(4)} | SL: ${tf15m.sl?.toFixed(
+        }\nJarak Harga ke ${crossText}: ${
+          tf15m.crossType === "ema7-ema99"
+            ? tf15m.crossDistance?.toFixed(6)
+            : Math.abs(tf15m.currClose - tf15m.currEma25)?.toFixed(6)
+        }\nTP: ${tf15m.tp?.toFixed(4)} | SL: ${tf15m.sl?.toFixed(
           4
-        )}\nProfit: ${tf15m.percentProfit?.toFixed(
-          2
-        )}%\nKeterangan: Candle saat ini terjadi cross ${crossText}, kelengkungan EMA7: ${
-          tf15m.curvature
-        }. Sinyal valid jika candle benar-benar cross dan momentum sesuai kelengkungan.`;
-        await sendTelegramMessage(msg15m);
+        )}\nProfit: ${tf15m.percentProfit?.toFixed(2)}%`;
+        await sendTelegramMessage(msgUnified);
       }
       // --- PUSH SINYAL TF 1H ---
       if (tf1h) {
-        let msg1h = `${
+        let msgUnified = `${
           tf1h.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
-        } (TF 1H)\nPair: ${symbol}\nTimeframe: 1h\nHarga Terakhir: ${
+        }\nPair: ${symbol}\nTimeframe: 1h\nHarga Terakhir: ${
           tf1h.currClose
         }\nEMA25: ${tf1h.currEma25?.toFixed(
           4
@@ -466,71 +467,14 @@ export default async function handler(
           tf1h.candleAfterCross
         }\nTrend 1h: ${
           tf1h.type === "buy" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
-        }\nKeterangan: Sinyal hanya dikirim jika baru terjadi cross EMA25/99 dan candle tidak lebih dari 3 setelah cross. Kelengkungan EMA25: ${
-          tf1h.curvature
-        }. Volume dan RSI juga ditampilkan untuk validasi tambahan.`;
-        await sendTelegramMessage(msg1h);
+        }`;
+        await sendTelegramMessage(msgUnified);
       }
       // --- PUSH SINYAL GABUNGAN (MULTI-TF KONFIRMASI) ---
       if (tf15m && tf1h) {
-        // Ambil harga open 24 jam lalu dari candle 1h
-        let percentChange24h = null;
-        try {
-          const klines1h24 = await axios.get(
-            "https://api.binance.com/api/v3/klines",
-            { params: { symbol, interval: "1h", limit: 25 } }
-          );
-          const open24h = parseFloat(klines1h24.data[0][1]); // open candle 24 jam lalu
-          percentChange24h = ((tf15m.currClose - open24h) / open24h) * 100;
-        } catch (err) {
-          percentChange24h = null;
-        }
-        // Ambil data long/short ratio dari Binance Futures
-        let longShortText = "-";
-        try {
-          const ratioRes = await axios.get(
-            `https://fapi.binance.com/futures/data/globalLongShortAccountRatio`,
-            { params: { symbol, period: "1h", limit: 1 } }
-          );
-          if (ratioRes.data && ratioRes.data.length > 0) {
-            const longRatio = parseFloat(ratioRes.data[0].longAccount);
-            const shortRatio = parseFloat(ratioRes.data[0].shortAccount);
-            const total = longRatio + shortRatio;
-            if (total > 0) {
-              const longPercent = (longRatio / total) * 100;
-              const shortPercent = (shortRatio / total) * 100;
-              longShortText = `Long ${longPercent.toFixed(
-                2
-              )}% | Short ${shortPercent.toFixed(2)}%`;
-            }
-          }
-        } catch (err) {
-          longShortText = "-";
-        }
-        // Push pesan pump/dump jika persentase perubahan harga 24h sangat tinggi
-        const pumpThreshold = 5; // 10% naik
-        const dumpThreshold = -5; // 10% turun
-        if (percentChange24h !== null && percentChange24h >= pumpThreshold) {
-          const pumpMsg = `🚨 PUMP ALERT\nPair: ${symbol}\nHarga Terakhir: ${
-            tf15m.currClose
-          }\nPerubahan Harga 24h: ${percentChange24h.toFixed(
-            2
-          )}%\nLong/Short: ${longShortText}\nKeterangan: Harga naik tajam dalam 24 jam terakhir.`;
-          await sendTelegramMessage(pumpMsg);
-        }
-        if (percentChange24h !== null && percentChange24h <= dumpThreshold) {
-          const dumpMsg = `⚠️ DUMP ALERT\nPair: ${symbol}\nHarga Terakhir: ${
-            tf15m.currClose
-          }\nPerubahan Harga 24h: ${percentChange24h.toFixed(
-            2
-          )}%\nLong/Short: ${longShortText}\nKeterangan: Harga turun tajam dalam 24 jam terakhir.`;
-          await sendTelegramMessage(dumpMsg);
-        }
-        let message = `${
-          tf15m.type === "buy" && tf1h === "up"
-            ? "🚀 BUY SIGNAL"
-            : "🔻 SELL SIGNAL"
-        } (KONFIRMASI MULTI-TF)\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
+        let msgUnified = `${
+          tf15m.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
+        }\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
           tf15m.currClose
         }\nEMA7: ${tf15m.currEma7.toFixed(
           4
@@ -547,13 +491,9 @@ export default async function handler(
         }\nJarak Harga ke EMA99: ${tf15m.crossDistance?.toFixed(
           6
         )}\nTrend 1h: ${
-          tf1h === "up" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
-        }\nPerubahan Harga 24h: ${
-          percentChange24h !== null ? percentChange24h.toFixed(2) + "%" : "-"
-        }\nLong/Short: ${longShortText}\nKeterangan: Candle saat ini masih dekat dengan titik cross EMA7/99, kelengkungan EMA7: ${
-          tf15m.curvature
-        }. Sinyal valid jika candle tidak terlalu jauh dari EMA99 dan momentum masih kuat, serta trend 1h mengkonfirmasi arah entry.`;
-        await sendTelegramMessage(message);
+          tf1h.type === "buy" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
+        }`;
+        await sendTelegramMessage(msgUnified);
       }
       // Delay antar request untuk menghindari rate limit
       await new Promise((res) => setTimeout(res, 200));
