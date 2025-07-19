@@ -41,34 +41,25 @@ async function sendTelegramMessage(message: string) {
   });
 }
 
+// Global variable untuk status bot
+let botRunning = true;
+
 // API route untuk monitoring EMA cross
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Path file status
-  const statusFile = path.resolve(process.cwd(), "pages/api/bot-status.json");
   // Jika ada query ?action=pause atau ?action=run, update status
   if (req.query.action === "pause") {
-    fs.writeFileSync(statusFile, JSON.stringify({ running: false }));
+    botRunning = false;
     return res.status(200).json({ success: true, status: "paused" });
   }
   if (req.query.action === "run") {
-    fs.writeFileSync(statusFile, JSON.stringify({ running: true }));
+    botRunning = true;
     return res.status(200).json({ success: true, status: "running" });
   }
-  // Baca status bot
-  let running = true;
-  if (fs.existsSync(statusFile)) {
-    try {
-      const status = JSON.parse(fs.readFileSync(statusFile, "utf8"));
-      running = status.running !== false;
-    } catch {
-      running = true;
-    }
-  }
   // Jika status pause, langsung return tanpa scan
-  if (!running) {
+  if (!botRunning) {
     return res.status(200).json({ success: true, status: "paused" });
   }
   try {
