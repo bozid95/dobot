@@ -209,7 +209,7 @@ export default async function handler(
             prevEma7 < prevEma99 &&
             currEma7 > currEma99 &&
             crossIndex !== null &&
-            ema7_15m.length - 1 - crossIndex <= 3 // candle tidak lebih dari 3 setelah cross
+            ema7_15m.length - 1 - crossIndex === 0 // hanya candle yang benar-benar cross
           ) {
             tf15m = {
               type: "buy",
@@ -234,7 +234,7 @@ export default async function handler(
             prevEma7 > prevEma99 &&
             currEma7 < currEma99 &&
             crossIndex !== null &&
-            ema7_15m.length - 1 - crossIndex <= 3 // candle tidak lebih dari 3 setelah cross
+            ema7_15m.length - 1 - crossIndex === 0 // hanya candle yang benar-benar cross
           ) {
             tf15m = {
               type: "sell",
@@ -273,6 +273,58 @@ export default async function handler(
           let losses = 0;
           for (let i = closes.length - period; i < closes.length - 1; i++) {
             const diff = closes[i + 1] - closes[i];
+          // Cross up EMA7/25
+          else if (
+            prevEma7 < prevEma25 &&
+            currEma7 > currEma25 &&
+            ema7_15m.length >= 3 &&
+            ema7_15m.length - 1 - crossIndex === 0 // hanya candle yang benar-benar cross
+          ) {
+            tf15m = {
+              type: "buy",
+              currClose,
+              currEma7,
+              currEma25,
+              currEma99,
+              dist799,
+              percent799,
+              tp: tpBuy799,
+              sl: currEma25,
+              percentProfit: percentProfitBuy799,
+              volume: volume15m,
+              rsi: rsi15m,
+              curvature: curvatureEma7,
+              crossDistance: Math.abs(currClose - currEma25),
+              candleAfterCross: ema7_15m.length - 1 - crossIndex,
+              crossType: "ema7-ema25"
+            };
+          }
+          // Cross down EMA7/25
+          else if (
+            prevEma7 > prevEma25 &&
+            currEma7 < currEma25 &&
+            ema7_15m.length >= 3 &&
+            ema7_15m.length - 1 - crossIndex === 0 // hanya candle yang benar-benar cross
+          ) {
+            tf15m = {
+              type: "sell",
+              currClose,
+              currEma7,
+              currEma25,
+              currEma99,
+              dist799,
+              percent799,
+              tp: tpSell799,
+              sl: currEma25,
+              percentProfit: percentProfitSell799,
+              volume: volume15m,
+              rsi: rsi15m,
+              curvature: curvatureEma7,
+              crossDistance: Math.abs(currClose - currEma25),
+              candleAfterCross: ema7_15m.length - 1 - crossIndex,
+              crossType: "ema7-ema25"
+            };
+          }
             if (diff > 0) gains += diff;
             else losses -= diff;
           }
@@ -360,6 +412,7 @@ export default async function handler(
       // Kirim sinyal hanya jika 15m dan 1h saling mengkonfirmasi
       // --- PUSH SINYAL TF 15M ---
       if (tf15m) {
+        let crossText = tf15m.crossType === "ema7-ema99" ? "EMA7/EMA99" : "EMA7/EMA25";
         let msg15m = `${
           tf15m.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
         } (TF 15M)\nPair: ${symbol}\nTimeframe: 15m\nHarga Terakhir: ${
@@ -370,21 +423,23 @@ export default async function handler(
           4
         )} | EMA99: ${tf15m.currEma99?.toFixed(
           4
-        )}\nJarak EMA7-EMA99: ${tf15m.dist799?.toFixed(
-          4
-        )} (${tf15m.percent799?.toFixed(2)}%)\nVolume: ${tf15m.volume?.toFixed(
+        )}\nJarak EMA7-${crossText}: ${
+          tf15m.crossType === "ema7-ema99"
+            ? tf15m.dist799?.toFixed(4) + " (" + tf15m.percent799?.toFixed(2) + "%)"
+            : (tf15m.currEma7 - tf15m.currEma25)?.toFixed(4)
+        }\nVolume: ${tf15m.volume?.toFixed(
           2
         )}\nRSI: ${tf15m.rsi?.toFixed(2)}\nKelengkungan EMA7: ${
           tf15m.curvature
-        }\nJarak Harga ke EMA99: ${tf15m.crossDistance?.toFixed(
+        }\nJarak Harga ke ${crossText}: ${tf15m.crossDistance?.toFixed(
           6
         )}\nTP: ${tf15m.tp?.toFixed(4)} | SL: ${tf15m.sl?.toFixed(
           4
         )}\nProfit: ${tf15m.percentProfit?.toFixed(
           2
-        )}%\nKeterangan: Candle saat ini masih dekat dengan titik cross EMA7/99, kelengkungan EMA7: ${
+        )}%\nKeterangan: Candle saat ini terjadi cross ${crossText}, kelengkungan EMA7: ${
           tf15m.curvature
-        }. Sinyal valid jika candle tidak terlalu jauh dari EMA99 dan momentum masih kuat.`;
+        }. Sinyal valid jika candle benar-benar cross dan momentum sesuai kelengkungan.`;
         await sendTelegramMessage(msg15m);
       }
       // --- PUSH SINYAL TF 1H ---
