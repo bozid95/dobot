@@ -216,8 +216,8 @@ export default async function handler(
           longShortText = "-";
         }
         // Push pesan pump/dump jika persentase perubahan harga 24h sangat tinggi
-        const pumpThreshold = 10; // 10% naik
-        const dumpThreshold = -10; // 10% turun
+        const pumpThreshold = 5; // 10% naik
+        const dumpThreshold = -5; // 10% turun
         if (percentChange24h !== null && percentChange24h >= pumpThreshold) {
           const pumpMsg = `🚨 PUMP ALERT\nPair: ${symbol}\nHarga Terakhir: ${
             tf15m.currClose
