@@ -133,6 +133,7 @@ export default async function handler(
         const closes15m = klines15m.data.map((k: any) => parseFloat(k[4]));
         const volumes15m = klines15m.data.map((k: any) => parseFloat(k[5]));
         volume15m = volumes15m[volumes15m.length - 1];
+        const currClose = closes15m[closes15m.length - 1];
         // Hitung RSI
         function calculateRSI(closes: number[], period: number): number {
           let gains = 0;
@@ -163,15 +164,7 @@ export default async function handler(
           if (deltaSlope > 0.0001) curvatureEma7 = "naik tajam";
           else if (deltaSlope < -0.0001) curvatureEma7 = "turun tajam";
           else curvatureEma7 = "datar";
-        }
-        const currClose = closes15m[closes15m.length - 1];
-        const dist725 = Math.abs(
-          ema7_15m[ema7_15m.length - 1] - ema25_15m[ema25_15m.length - 1]
-        );
-        const dist799 = Math.abs(
-          ema7_15m[ema7_15m.length - 1] - ema99_15m[ema99_15m.length - 1]
-        );
-        {
+
           const prevEma7 = ema7_15m[ema7_15m.length - 2];
           const prevEma25 = ema25_15m[ema25_15m.length - 2];
           const prevEma99 = ema99_15m[ema99_15m.length - 2];
@@ -185,8 +178,17 @@ export default async function handler(
             ((tpBuy799 - currClose) / currClose) * 100;
           const percentProfitSell799 =
             ((currClose - tpSell799) / currClose) * 100;
-          const minProfitPercent = 0.2;
-          // Deteksi index candle cross
+          const dist799 = Math.abs(currEma7 - currEma99);
+          const dist725 = Math.abs(currEma7 - currEma25);
+          const percent725 = ((currEma7 - currEma25) / currClose) * 100;
+          const tpBuy725 = currClose + Math.abs(currEma7 - currEma25) * 2;
+          const tpSell725 = currClose - Math.abs(currEma7 - currEma25) * 2;
+          const percentProfitBuy725 =
+            ((tpBuy725 - currClose) / currClose) * 100;
+          const percentProfitSell725 =
+            ((currClose - tpSell725) / currClose) * 100;
+
+          // Deteksi index candle cross EMA7/99
           let crossIndex = null;
           for (let i = ema7_15m.length - 10; i < ema7_15m.length - 1; i++) {
             if (
@@ -204,55 +206,111 @@ export default async function handler(
               break;
             }
           }
-          // Cross up EMA7/99
-          if (
-            prevEma7 < prevEma99 &&
-            currEma7 > currEma99 &&
-            crossIndex !== null &&
-            ema7_15m.length - 1 - crossIndex === 0 // hanya candle yang benar-benar cross
-          ) {
-            tf15m = {
-              type: "buy",
-              currClose,
-              currEma7,
-              currEma25,
-              currEma99,
-              dist799,
-              percent799,
-              tp: tpBuy799,
-              sl: currEma99,
-              percentProfit: percentProfitBuy799,
-              volume: volume15m,
-              rsi: rsi15m,
-              curvature: curvatureEma7,
-              crossDistance: Math.abs(currClose - currEma99),
-              candleAfterCross: ema7_15m.length - 1 - crossIndex,
-            };
+          // Deteksi index candle cross EMA7/25
+          let crossIndex725 = null;
+          for (let i = ema7_15m.length - 10; i < ema7_15m.length - 1; i++) {
+            if (
+              ema7_15m[i - 1] < ema25_15m[i - 1] &&
+              ema7_15m[i] > ema25_15m[i]
+            ) {
+              crossIndex725 = i;
+              break;
+            }
+            if (
+              ema7_15m[i - 1] > ema25_15m[i - 1] &&
+              ema7_15m[i] < ema25_15m[i]
+            ) {
+              crossIndex725 = i;
+              break;
+            }
           }
-          // Cross down EMA7/99
+
+          // Cross up/down EMA7/99
+          if (crossIndex !== null && ema7_15m.length - 1 - crossIndex === 0) {
+            if (prevEma7 < prevEma99 && currEma7 > currEma99) {
+              tf15m = {
+                type: "buy",
+                currClose,
+                currEma7,
+                currEma25,
+                currEma99,
+                dist799,
+                percent799,
+                tp: tpBuy799,
+                sl: currEma99,
+                percentProfit: percentProfitBuy799,
+                volume: volume15m,
+                rsi: rsi15m,
+                curvature: curvatureEma7,
+                crossDistance: Math.abs(currClose - currEma99),
+                candleAfterCross: ema7_15m.length - 1 - crossIndex,
+                crossType: "ema7-ema99",
+              };
+            } else if (prevEma7 > prevEma99 && currEma7 < currEma99) {
+              tf15m = {
+                type: "sell",
+                currClose,
+                currEma7,
+                currEma25,
+                currEma99,
+                dist799,
+                percent799,
+                tp: tpSell799,
+                sl: currEma99,
+                percentProfit: percentProfitSell799,
+                volume: volume15m,
+                rsi: rsi15m,
+                curvature: curvatureEma7,
+                crossDistance: Math.abs(currClose - currEma99),
+                candleAfterCross: ema7_15m.length - 1 - crossIndex,
+                crossType: "ema7-ema99",
+              };
+            }
+          }
+          // Cross up/down EMA7/25
           else if (
-            prevEma7 > prevEma99 &&
-            currEma7 < currEma99 &&
-            crossIndex !== null &&
-            ema7_15m.length - 1 - crossIndex === 0 // hanya candle yang benar-benar cross
+            crossIndex725 !== null &&
+            ema7_15m.length - 1 - crossIndex725 === 0
           ) {
-            tf15m = {
-              type: "sell",
-              currClose,
-              currEma7,
-              currEma25,
-              currEma99,
-              dist799,
-              percent799,
-              tp: tpSell799,
-              sl: currEma99,
-              percentProfit: percentProfitSell799,
-              volume: volume15m,
-              rsi: rsi15m,
-              curvature: curvatureEma7,
-              crossDistance: Math.abs(currClose - currEma99),
-              candleAfterCross: ema7_15m.length - 1 - crossIndex,
-            };
+            if (prevEma7 < prevEma25 && currEma7 > currEma25) {
+              tf15m = {
+                type: "buy",
+                currClose,
+                currEma7,
+                currEma25,
+                currEma99,
+                dist725,
+                percent725,
+                tp: tpBuy725,
+                sl: currEma25,
+                percentProfit: percentProfitBuy725,
+                volume: volume15m,
+                rsi: rsi15m,
+                curvature: curvatureEma7,
+                crossDistance: Math.abs(currClose - currEma25),
+                candleAfterCross: ema7_15m.length - 1 - crossIndex725,
+                crossType: "ema7-ema25",
+              };
+            } else if (prevEma7 > prevEma25 && currEma7 < currEma25) {
+              tf15m = {
+                type: "sell",
+                currClose,
+                currEma7,
+                currEma25,
+                currEma99,
+                dist725,
+                percent725,
+                tp: tpSell725,
+                sl: currEma25,
+                percentProfit: percentProfitSell725,
+                volume: volume15m,
+                rsi: rsi15m,
+                curvature: curvatureEma7,
+                crossDistance: Math.abs(currClose - currEma25),
+                candleAfterCross: ema7_15m.length - 1 - crossIndex725,
+                crossType: "ema7-ema25",
+              };
+            }
           }
         }
       } catch (err: any) {
@@ -273,58 +331,6 @@ export default async function handler(
           let losses = 0;
           for (let i = closes.length - period; i < closes.length - 1; i++) {
             const diff = closes[i + 1] - closes[i];
-          // Cross up EMA7/25
-          else if (
-            prevEma7 < prevEma25 &&
-            currEma7 > currEma25 &&
-            ema7_15m.length >= 3 &&
-            ema7_15m.length - 1 - crossIndex === 0 // hanya candle yang benar-benar cross
-          ) {
-            tf15m = {
-              type: "buy",
-              currClose,
-              currEma7,
-              currEma25,
-              currEma99,
-              dist799,
-              percent799,
-              tp: tpBuy799,
-              sl: currEma25,
-              percentProfit: percentProfitBuy799,
-              volume: volume15m,
-              rsi: rsi15m,
-              curvature: curvatureEma7,
-              crossDistance: Math.abs(currClose - currEma25),
-              candleAfterCross: ema7_15m.length - 1 - crossIndex,
-              crossType: "ema7-ema25"
-            };
-          }
-          // Cross down EMA7/25
-          else if (
-            prevEma7 > prevEma25 &&
-            currEma7 < currEma25 &&
-            ema7_15m.length >= 3 &&
-            ema7_15m.length - 1 - crossIndex === 0 // hanya candle yang benar-benar cross
-          ) {
-            tf15m = {
-              type: "sell",
-              currClose,
-              currEma7,
-              currEma25,
-              currEma99,
-              dist799,
-              percent799,
-              tp: tpSell799,
-              sl: currEma25,
-              percentProfit: percentProfitSell799,
-              volume: volume15m,
-              rsi: rsi15m,
-              curvature: curvatureEma7,
-              crossDistance: Math.abs(currClose - currEma25),
-              candleAfterCross: ema7_15m.length - 1 - crossIndex,
-              crossType: "ema7-ema25"
-            };
-          }
             if (diff > 0) gains += diff;
             else losses -= diff;
           }
@@ -412,7 +418,8 @@ export default async function handler(
       // Kirim sinyal hanya jika 15m dan 1h saling mengkonfirmasi
       // --- PUSH SINYAL TF 15M ---
       if (tf15m) {
-        let crossText = tf15m.crossType === "ema7-ema99" ? "EMA7/EMA99" : "EMA7/EMA25";
+        let crossText =
+          tf15m.crossType === "ema7-ema99" ? "EMA7/EMA99" : "EMA7/EMA25";
         let msg15m = `${
           tf15m.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
         } (TF 15M)\nPair: ${symbol}\nTimeframe: 15m\nHarga Terakhir: ${
@@ -421,15 +428,16 @@ export default async function handler(
           4
         )} | EMA25: ${tf15m.currEma25?.toFixed(
           4
-        )} | EMA99: ${tf15m.currEma99?.toFixed(
-          4
-        )}\nJarak EMA7-${crossText}: ${
+        )} | EMA99: ${tf15m.currEma99?.toFixed(4)}\nJarak EMA7-${crossText}: ${
           tf15m.crossType === "ema7-ema99"
-            ? tf15m.dist799?.toFixed(4) + " (" + tf15m.percent799?.toFixed(2) + "%)"
+            ? tf15m.dist799?.toFixed(4) +
+              " (" +
+              tf15m.percent799?.toFixed(2) +
+              "%)"
             : (tf15m.currEma7 - tf15m.currEma25)?.toFixed(4)
-        }\nVolume: ${tf15m.volume?.toFixed(
+        }\nVolume: ${tf15m.volume?.toFixed(2)}\nRSI: ${tf15m.rsi?.toFixed(
           2
-        )}\nRSI: ${tf15m.rsi?.toFixed(2)}\nKelengkungan EMA7: ${
+        )}\nKelengkungan EMA7: ${
           tf15m.curvature
         }\nJarak Harga ke ${crossText}: ${tf15m.crossDistance?.toFixed(
           6
