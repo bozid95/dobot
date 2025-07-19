@@ -31,19 +31,55 @@ const Home: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
-      <div className="bg-white shadow-lg rounded-lg p-8 w-full max-w-md">
-        <h1 className="text-2xl font-bold mb-4 text-blue-700 text-center">
+    <div
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        background: "#f8fafc",
+      }}
+    >
+      <div
+        style={{
+          background: "#fff",
+          boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
+          borderRadius: "16px",
+          padding: "32px",
+          width: "100%",
+          maxWidth: "400px",
+        }}
+      >
+        <h1
+          style={{
+            fontSize: "2rem",
+            fontWeight: "bold",
+            marginBottom: "1rem",
+            color: "#2563eb",
+            textAlign: "center",
+          }}
+        >
           Dashboard Bot EMA Binance
         </h1>
-        <ul className="mb-6 text-gray-700">
+        <ul style={{ marginBottom: "1.5rem", color: "#374151" }}>
           <li>Jumlah pair USDT yang dipantau: {pairCount}</li>
           <li>Timeframe: 15 menit & 1 jam</li>
           <li>EMA: 7, 25, 99</li>
           <li>Notifikasi: Otomatis ke Telegram</li>
         </ul>
-        <div className="mb-4 flex items-center justify-center">
-          <label htmlFor="pairCount" className="mr-2 font-medium">
+        <div
+          style={{
+            marginBottom: "1rem",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <label
+            htmlFor="pairCount"
+            style={{ marginRight: "0.5rem", fontWeight: "500" }}
+          >
             Jumlah Pair USDT:
           </label>
           <input
@@ -53,18 +89,37 @@ const Home: React.FC = () => {
             max={1000}
             value={pairCount}
             onChange={(e) => setPairCount(Number(e.target.value))}
-            className="border rounded px-2 py-1 w-20 text-center focus:outline-none focus:ring focus:border-blue-400"
+            style={{
+              border: "1px solid #d1d5db",
+              borderRadius: "6px",
+              padding: "4px 8px",
+              width: "80px",
+              textAlign: "center",
+              outline: "none",
+            }}
           />
         </div>
-        <div className="flex justify-center gap-4 mb-4">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: "1rem",
+            marginBottom: "1rem",
+          }}
+        >
           <button
             onClick={handleMonitor}
             disabled={loading || isRunning}
-            className={`px-4 py-2 rounded font-semibold transition-colors duration-200 ${
-              isRunning
-                ? "bg-blue-300"
-                : "bg-blue-600 hover:bg-blue-700 text-white"
-            }`}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "8px",
+              fontWeight: "600",
+              background: isRunning ? "#93c5fd" : "#2563eb",
+              color: "#fff",
+              border: "none",
+              cursor: loading || isRunning ? "not-allowed" : "pointer",
+              transition: "background 0.2s",
+            }}
           >
             {isRunning
               ? "Sedang Running..."
@@ -75,12 +130,28 @@ const Home: React.FC = () => {
           <button
             onClick={handlePause}
             disabled={!isRunning}
-            className="px-4 py-2 rounded font-semibold bg-gray-400 text-white hover:bg-gray-500 transition-colors duration-200"
+            style={{
+              padding: "8px 16px",
+              borderRadius: "8px",
+              fontWeight: "600",
+              background: "#6b7280",
+              color: "#fff",
+              border: "none",
+              cursor: !isRunning ? "not-allowed" : "pointer",
+              transition: "background 0.2s",
+            }}
           >
             Pause
           </button>
         </div>
-        <p className="text-center text-sm text-gray-600 mt-2">
+        <p
+          style={{
+            textAlign: "center",
+            fontSize: "0.875rem",
+            color: "#4b5563",
+            marginTop: "0.5rem",
+          }}
+        >
           {isRunning ? "Aplikasi sedang running..." : result}
         </p>
       </div>
