@@ -133,15 +133,13 @@ export default async function handler(
         const ema25_15m = calculateEMA(closes15m, 25);
         const ema99_15m = calculateEMA(closes15m, 99);
         const currClose = closes15m[closes15m.length - 1];
-        const minDistance = currClose * 0.003;
         const dist725 = Math.abs(
           ema7_15m[ema7_15m.length - 1] - ema25_15m[ema25_15m.length - 1]
         );
         const dist799 = Math.abs(
           ema7_15m[ema7_15m.length - 1] - ema99_15m[ema99_15m.length - 1]
         );
-        if (dist799 < minDistance || dist799 < dist725) tf15m = null;
-        else {
+        {
           const prevEma7 = ema7_15m[ema7_15m.length - 2];
           const prevEma25 = ema25_15m[ema25_15m.length - 2];
           const prevEma99 = ema99_15m[ema99_15m.length - 2];
