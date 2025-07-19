@@ -186,11 +186,32 @@ export default async function handler(
           const percentProfitSell799 =
             ((currClose - tpSell799) / currClose) * 100;
           const minProfitPercent = 0.2;
+          // Deteksi index candle cross
+          let crossIndex = null;
+          for (let i = ema7_15m.length - 10; i < ema7_15m.length - 1; i++) {
+            if (
+              ema7_15m[i - 1] < ema99_15m[i - 1] &&
+              ema7_15m[i] > ema99_15m[i]
+            ) {
+              crossIndex = i;
+              break;
+            }
+            if (
+              ema7_15m[i - 1] > ema99_15m[i - 1] &&
+              ema7_15m[i] < ema99_15m[i]
+            ) {
+              crossIndex = i;
+              break;
+            }
+          }
           // Cross up EMA7/99
           if (
             prevEma7 < prevEma99 &&
             currEma7 > currEma99 &&
-            percentProfitBuy799 >= minProfitPercent
+            percentProfitBuy799 >= minProfitPercent &&
+            Math.abs(currClose - currEma99) / currClose < 0.01 &&
+            crossIndex !== null &&
+            ema7_15m.length - 1 - crossIndex <= 3 // candle tidak lebih dari 3 setelah cross
           ) {
             tf15m = {
               type: "buy",
@@ -206,13 +227,18 @@ export default async function handler(
               volume: volume15m,
               rsi: rsi15m,
               curvature: curvatureEma7,
+              crossDistance: Math.abs(currClose - currEma99),
+              candleAfterCross: ema7_15m.length - 1 - crossIndex,
             };
           }
           // Cross down EMA7/99
           else if (
             prevEma7 > prevEma99 &&
             currEma7 < currEma99 &&
-            percentProfitSell799 >= minProfitPercent
+            percentProfitSell799 >= minProfitPercent &&
+            Math.abs(currClose - currEma99) / currClose < 0.01 &&
+            crossIndex !== null &&
+            ema7_15m.length - 1 - crossIndex <= 3 // candle tidak lebih dari 3 setelah cross
           ) {
             tf15m = {
               type: "sell",
@@ -228,6 +254,8 @@ export default async function handler(
               volume: volume15m,
               rsi: rsi15m,
               curvature: curvatureEma7,
+              crossDistance: Math.abs(currClose - currEma99),
+              candleAfterCross: ema7_15m.length - 1 - crossIndex,
             };
           }
         }
@@ -273,13 +301,15 @@ export default async function handler(
           2
         )}\nRSI: ${tf15m.rsi?.toFixed(2)}\nKelengkungan EMA7: ${
           tf15m.curvature
-        }\nTP: ${tf15m.tp?.toFixed(4)} | SL: ${tf15m.sl?.toFixed(
+        }\nJarak Harga ke EMA99: ${tf15m.crossDistance?.toFixed(
+          6
+        )}\nTP: ${tf15m.tp?.toFixed(4)} | SL: ${tf15m.sl?.toFixed(
           4
         )}\nProfit: ${tf15m.percentProfit?.toFixed(
           2
-        )}%\nKeterangan: EMA7 cross ${
-          tf15m.type === "buy" ? "UP" : "DOWN"
-        } EMA99 di 15m, sinyal valid.`;
+        )}%\nKeterangan: Candle saat ini masih dekat dengan titik cross EMA7/99, kelengkungan EMA7: ${
+          tf15m.curvature
+        }. Sinyal valid jika candle tidak terlalu jauh dari EMA99 dan momentum masih kuat.`;
         await sendTelegramMessage(msg15m);
       }
       // --- PUSH SINYAL TF 1H ---
@@ -366,15 +396,15 @@ export default async function handler(
           2
         )}\nRSI: ${tf15m.rsi?.toFixed(2)}\nKelengkungan EMA7: ${
           tf15m.curvature
-        }\nTrend 1h: ${
+        }\nJarak Harga ke EMA99: ${tf15m.crossDistance?.toFixed(
+          6
+        )}\nTrend 1h: ${
           tf1h === "up" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
         }\nPerubahan Harga 24h: ${
           percentChange24h !== null ? percentChange24h.toFixed(2) + "%" : "-"
-        }\nLong/Short: ${longShortText}\nKeterangan: EMA7 cross ${
-          tf15m.type === "buy" ? "UP" : "DOWN"
-        } EMA99 di 15m, trend 1h ${
-          tf1h === "up" ? "UP" : "DOWN"
-        }, sinyal valid.`;
+        }\nLong/Short: ${longShortText}\nKeterangan: Candle saat ini masih dekat dengan titik cross EMA7/99, kelengkungan EMA7: ${
+          tf15m.curvature
+        }. Sinyal valid jika candle tidak terlalu jauh dari EMA99 dan momentum masih kuat, serta trend 1h mengkonfirmasi arah entry.`;
         await sendTelegramMessage(message);
       }
       // Delay antar request untuk menghindari rate limit
