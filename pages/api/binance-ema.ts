@@ -269,16 +269,95 @@ export default async function handler(
           { params: { symbol, interval: "1h", limit: 120 } }
         );
         const closes1h = klines1h.data.map((k: any) => parseFloat(k[4]));
+        const volumes1h = klines1h.data.map((k: any) => parseFloat(k[5]));
+        const volume1h = volumes1h[volumes1h.length - 1];
+        // Hitung RSI 1h
+        function calculateRSI1h(closes: number[], period: number): number {
+          let gains = 0;
+          let losses = 0;
+          for (let i = closes.length - period; i < closes.length - 1; i++) {
+            const diff = closes[i + 1] - closes[i];
+            if (diff > 0) gains += diff;
+            else losses -= diff;
+          }
+          const avgGain = gains / period;
+          const avgLoss = losses / period;
+          if (avgLoss === 0) return 100;
+          const rs = avgGain / avgLoss;
+          return 100 - 100 / (1 + rs);
+        }
+        const rsi1h = calculateRSI1h(closes1h, 14);
         const ema25_1h = calculateEMA(closes1h, 25);
         const ema99_1h = calculateEMA(closes1h, 99);
+        // Deteksi kelengkungan EMA25
+        let curvatureEma25 = null;
+        if (ema25_1h.length >= 3) {
+          const slopePrev =
+            ema25_1h[ema25_1h.length - 2] - ema25_1h[ema25_1h.length - 3];
+          const slopeCurr =
+            ema25_1h[ema25_1h.length - 1] - ema25_1h[ema25_1h.length - 2];
+          const deltaSlope = slopeCurr - slopePrev;
+          if (deltaSlope > 0.0001) curvatureEma25 = "naik tajam";
+          else if (deltaSlope < -0.0001) curvatureEma25 = "turun tajam";
+          else curvatureEma25 = "datar";
+        }
+        const currClose1h = closes1h[closes1h.length - 1];
         const prevEma25_1h = ema25_1h[ema25_1h.length - 2];
         const currEma25_1h = ema25_1h[ema25_1h.length - 1];
         const prevEma99_1h = ema99_1h[ema99_1h.length - 2];
         const currEma99_1h = ema99_1h[ema99_1h.length - 1];
-        // Trend konfirmasi
-        if (currEma25_1h > currEma99_1h) tf1h = "up";
-        else if (currEma25_1h < currEma99_1h) tf1h = "down";
-        else tf1h = null;
+        // Deteksi index candle cross EMA25/99
+        let crossIndex1h = null;
+        for (let i = ema25_1h.length - 10; i < ema25_1h.length - 1; i++) {
+          if (ema25_1h[i - 1] < ema99_1h[i - 1] && ema25_1h[i] > ema99_1h[i]) {
+            crossIndex1h = i;
+            break;
+          }
+          if (ema25_1h[i - 1] > ema99_1h[i - 1] && ema25_1h[i] < ema99_1h[i]) {
+            crossIndex1h = i;
+            break;
+          }
+        }
+        // Cross up EMA25/99
+        if (
+          prevEma25_1h < prevEma99_1h &&
+          currEma25_1h > currEma99_1h &&
+          crossIndex1h !== null &&
+          ema25_1h.length - 1 - crossIndex1h <= 3 // candle tidak lebih dari 3 setelah cross
+        ) {
+          tf1h = {
+            type: "buy",
+            currClose: currClose1h,
+            currEma25: currEma25_1h,
+            currEma99: currEma99_1h,
+            volume: volume1h,
+            rsi: rsi1h,
+            curvature: curvatureEma25,
+            candleAfterCross: ema25_1h.length - 1 - crossIndex1h,
+          };
+        }
+        // Cross down EMA25/99
+        else if (
+          prevEma25_1h > prevEma99_1h &&
+          currEma25_1h < currEma99_1h &&
+          crossIndex1h !== null &&
+          ema25_1h.length - 1 - crossIndex1h <= 3 // candle tidak lebih dari 3 setelah cross
+        ) {
+          tf1h = {
+            type: "sell",
+            currClose: currClose1h,
+            currEma25: currEma25_1h,
+            currEma99: currEma99_1h,
+            volume: volume1h,
+            rsi: rsi1h,
+            curvature: curvatureEma25,
+            candleAfterCross: ema25_1h.length - 1 - crossIndex1h,
+          };
+        }
+        // Jika tidak ada cross valid, null
+        else {
+          tf1h = null;
+        }
       } catch (err: any) {
         tf1h = null;
       }
@@ -315,12 +394,22 @@ export default async function handler(
       // --- PUSH SINYAL TF 1H ---
       if (tf1h) {
         let msg1h = `${
-          tf1h === "up" ? "� BUY SIGNAL" : "🔻 SELL SIGNAL"
-        } (TF 1H)\nPair: ${symbol}\nTimeframe: 1h\nTrend 1h: ${
-          tf1h === "up" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
-        }\nKeterangan: Trend EMA25 ${
-          tf1h === "up" ? ">" : "<"
-        } EMA99 di 1h, sinyal valid.`;
+          tf1h.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
+        } (TF 1H)\nPair: ${symbol}\nTimeframe: 1h\nHarga Terakhir: ${
+          tf1h.currClose
+        }\nEMA25: ${tf1h.currEma25?.toFixed(
+          4
+        )} | EMA99: ${tf1h.currEma99?.toFixed(
+          4
+        )}\nVolume: ${tf1h.volume?.toFixed(2)}\nRSI: ${tf1h.rsi?.toFixed(
+          2
+        )}\nKelengkungan EMA25: ${tf1h.curvature}\nCandle setelah cross: ${
+          tf1h.candleAfterCross
+        }\nTrend 1h: ${
+          tf1h.type === "buy" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
+        }\nKeterangan: Sinyal hanya dikirim jika baru terjadi cross EMA25/99 dan candle tidak lebih dari 3 setelah cross. Kelengkungan EMA25: ${
+          tf1h.curvature
+        }. Volume dan RSI juga ditampilkan untuk validasi tambahan.`;
         await sendTelegramMessage(msg1h);
       }
       // --- PUSH SINYAL GABUNGAN (MULTI-TF KONFIRMASI) ---
