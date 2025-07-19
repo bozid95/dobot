@@ -122,16 +122,48 @@ export default async function handler(
     for (const symbol of usdtPairs) {
       let tf15m = null;
       let tf1h = null;
+      let volume15m = null;
+      let rsi15m = null;
       // Ambil data 15m
       try {
         const klines15m = await axios.get(
-          "https://api.binance.com/api/v3/klines",
+          "https://api.binance.com/apiapaka/v3/klines",
           { params: { symbol, interval: "15m", limit: 120 } }
         );
         const closes15m = klines15m.data.map((k: any) => parseFloat(k[4]));
+        const volumes15m = klines15m.data.map((k: any) => parseFloat(k[5]));
+        volume15m = volumes15m[volumes15m.length - 1];
+        // Hitung RSI
+        function calculateRSI(closes: number[], period: number): number {
+          let gains = 0;
+          let losses = 0;
+          for (let i = closes.length - period; i < closes.length - 1; i++) {
+            const diff = closes[i + 1] - closes[i];
+            if (diff > 0) gains += diff;
+            else losses -= diff;
+          }
+          const avgGain = gains / period;
+          const avgLoss = losses / period;
+          if (avgLoss === 0) return 100;
+          const rs = avgGain / avgLoss;
+          return 100 - 100 / (1 + rs);
+        }
+        rsi15m = calculateRSI(closes15m, 14);
         const ema7_15m = calculateEMA(closes15m, 7);
         const ema25_15m = calculateEMA(closes15m, 25);
         const ema99_15m = calculateEMA(closes15m, 99);
+        // Deteksi kelengkungan EMA7
+        let curvatureEma7 = null;
+        if (ema7_15m.length >= 3) {
+          const slopePrev =
+            ema7_15m[ema7_15m.length - 2] - ema7_15m[ema7_15m.length - 3];
+          const slopeCurr =
+            ema7_15m[ema7_15m.length - 1] - ema7_15m[ema7_15m.length - 2];
+          const deltaSlope = slopeCurr - slopePrev;
+          if (deltaSlope > 0.0001) curvatureEma7 = "naik tajam";
+          else if (deltaSlope < -0.0001) curvatureEma7 = "turun tajam";
+          else curvatureEma7 = "datar";
+        }
         const currClose = closes15m[closes15m.length - 1];
         const dist725 = Math.abs(
           ema7_15m[ema7_15m.length - 1] - ema25_15m[ema25_15m.length - 1]
@@ -171,6 +203,9 @@ export default async function handler(
               tp: tpBuy799,
               sl: currEma99,
               percentProfit: percentProfitBuy799,
+              volume: volume15m,
+              rsi: rsi15m,
+              curvature: curvatureEma7,
             };
           }
           // Cross down EMA7/99
@@ -190,6 +225,9 @@ export default async function handler(
               tp: tpSell799,
               sl: currEma99,
               percentProfit: percentProfitSell799,
+              volume: volume15m,
+              rsi: rsi15m,
+              curvature: curvatureEma7,
             };
           }
         }
@@ -219,7 +257,9 @@ export default async function handler(
       // Kirim sinyal hanya jika 15m dan 1h saling mengkonfirmasi
       // --- PUSH SINYAL TF 15M ---
       if (tf15m) {
-        let msg15m = `📊 SIGNAL EMA 15M\nPair: ${symbol}\nTimeframe: 15m\nHarga Terakhir: ${
+        let msg15m = `${
+          tf15m.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
+        } (TF 15M)\nPair: ${symbol}\nTimeframe: 15m\nHarga Terakhir: ${
           tf15m.currClose
         }\nEMA7: ${tf15m.currEma7?.toFixed(
           4
@@ -229,20 +269,28 @@ export default async function handler(
           4
         )}\nJarak EMA7-EMA99: ${tf15m.dist799?.toFixed(
           4
-        )} (${tf15m.percent799?.toFixed(
+        )} (${tf15m.percent799?.toFixed(2)}%)\nVolume: ${tf15m.volume?.toFixed(
           2
-        )}%)\nType: ${tf15m.type?.toUpperCase()}\nTP: ${tf15m.tp?.toFixed(
+        )}\nRSI: ${tf15m.rsi?.toFixed(2)}\nKelengkungan EMA7: ${
+          tf15m.curvature
+        }\nTP: ${tf15m.tp?.toFixed(4)} | SL: ${tf15m.sl?.toFixed(
           4
-        )} | SL: ${tf15m.sl?.toFixed(
-          4
-        )}\nProfit: ${tf15m.percentProfit?.toFixed(2)}%`;
+        )}\nProfit: ${tf15m.percentProfit?.toFixed(
+          2
+        )}%\nKeterangan: EMA7 cross ${
+          tf15m.type === "buy" ? "UP" : "DOWN"
+        } EMA99 di 15m, sinyal valid.`;
         await sendTelegramMessage(msg15m);
       }
       // --- PUSH SINYAL TF 1H ---
       if (tf1h) {
-        let msg1h = `📈 SIGNAL EMA 1H\nPair: ${symbol}\nTimeframe: 1h\nTrend: ${tf1h.toUpperCase()} (EMA25 ${
+        let msg1h = `${
+          tf1h === "up" ? "� BUY SIGNAL" : "🔻 SELL SIGNAL"
+        } (TF 1H)\nPair: ${symbol}\nTimeframe: 1h\nTrend 1h: ${
+          tf1h === "up" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
+        }\nKeterangan: Trend EMA25 ${
           tf1h === "up" ? ">" : "<"
-        } EMA99)`;
+        } EMA99 di 1h, sinyal valid.`;
         await sendTelegramMessage(msg1h);
       }
       // --- PUSH SINYAL GABUNGAN (MULTI-TF KONFIRMASI) ---
@@ -300,44 +348,34 @@ export default async function handler(
           )}%\nLong/Short: ${longShortText}\nKeterangan: Harga turun tajam dalam 24 jam terakhir.`;
           await sendTelegramMessage(dumpMsg);
         }
-        let message = "";
-        if (tf15m.type === "buy" && tf1h === "up") {
-          message += `🚀 BUY SIGNAL (KONFIRMASI MULTI-TF)\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
-            tf15m.currClose
-          }\nEMA7: ${tf15m.currEma7.toFixed(
-            4
-          )} | EMA25: ${tf15m.currEma25.toFixed(
-            4
-          )} | EMA99: ${tf15m.currEma99.toFixed(
-            4
-          )}\nJarak EMA7-EMA99: ${tf15m.dist799.toFixed(
-            4
-          )} (${tf15m.percent799.toFixed(
-            2
-          )}%)\nTrend 1h: UP (EMA25 > EMA99)\nPerubahan Harga 24h: ${
-            percentChange24h !== null ? percentChange24h.toFixed(2) + "%" : "-"
-          }\nLong/Short: ${longShortText}\nKeterangan: EMA7 cross UP EMA99 di 15m, trend 1h UP, sinyal valid.`;
-        }
-        if (tf15m.type === "sell" && tf1h === "down") {
-          message += `🔻 SELL SIGNAL (KONFIRMASI MULTI-TF)\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
-            tf15m.currClose
-          }\nEMA7: ${tf15m.currEma7.toFixed(
-            4
-          )} | EMA25: ${tf15m.currEma25.toFixed(
-            4
-          )} | EMA99: ${tf15m.currEma99.toFixed(
-            4
-          )}\nJarak EMA7-EMA99: ${tf15m.dist799.toFixed(
-            4
-          )} (${tf15m.percent799.toFixed(
-            2
-          )}%)\nTrend 1h: DOWN (EMA25 < EMA99)\nPerubahan Harga 24h: ${
-            percentChange24h !== null ? percentChange24h.toFixed(2) + "%" : "-"
-          }\nLong/Short: ${longShortText}\nKeterangan: EMA7 cross DOWN EMA99 di 15m, trend 1h DOWN, sinyal valid.`;
-        }
-        if (message) {
-          await sendTelegramMessage(message);
-        }
+        let message = `${
+          tf15m.type === "buy" && tf1h === "up"
+            ? "🚀 BUY SIGNAL"
+            : "🔻 SELL SIGNAL"
+        } (KONFIRMASI MULTI-TF)\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
+          tf15m.currClose
+        }\nEMA7: ${tf15m.currEma7.toFixed(
+          4
+        )} | EMA25: ${tf15m.currEma25.toFixed(
+          4
+        )} | EMA99: ${tf15m.currEma99.toFixed(
+          4
+        )}\nJarak EMA7-EMA99: ${tf15m.dist799.toFixed(
+          4
+        )} (${tf15m.percent799.toFixed(2)}%)\nVolume: ${tf15m.volume?.toFixed(
+          2
+        )}\nRSI: ${tf15m.rsi?.toFixed(2)}\nKelengkungan EMA7: ${
+          tf15m.curvature
+        }\nTrend 1h: ${
+          tf1h === "up" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
+        }\nPerubahan Harga 24h: ${
+          percentChange24h !== null ? percentChange24h.toFixed(2) + "%" : "-"
+        }\nLong/Short: ${longShortText}\nKeterangan: EMA7 cross ${
+          tf15m.type === "buy" ? "UP" : "DOWN"
+        } EMA99 di 15m, trend 1h ${
+          tf1h === "up" ? "UP" : "DOWN"
+        }, sinyal valid.`;
+        await sendTelegramMessage(message);
       }
       // Delay antar request untuk menghindari rate limit
       await new Promise((res) => setTimeout(res, 200));
