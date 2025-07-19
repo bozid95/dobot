@@ -208,8 +208,6 @@ export default async function handler(
           if (
             prevEma7 < prevEma99 &&
             currEma7 > currEma99 &&
-            percentProfitBuy799 >= minProfitPercent &&
-            Math.abs(currClose - currEma99) / currClose < 0.01 &&
             crossIndex !== null &&
             ema7_15m.length - 1 - crossIndex <= 3 // candle tidak lebih dari 3 setelah cross
           ) {
@@ -235,8 +233,6 @@ export default async function handler(
           else if (
             prevEma7 > prevEma99 &&
             currEma7 < currEma99 &&
-            percentProfitSell799 >= minProfitPercent &&
-            Math.abs(currClose - currEma99) / currClose < 0.01 &&
             crossIndex !== null &&
             ema7_15m.length - 1 - crossIndex <= 3 // candle tidak lebih dari 3 setelah cross
           ) {
