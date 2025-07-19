@@ -226,7 +226,7 @@ export default async function handler(
           }
 
           // Cross up/down EMA7/99
-          if (crossIndex !== null && ema7_15m.length - 1 - crossIndex === 0) {
+          if (crossIndex !== null && ema7_15m.length - 1 - crossIndex <= 2) {
             if (prevEma7 < prevEma99 && currEma7 > currEma99) {
               tf15m = {
                 type: "buy",
@@ -270,7 +270,7 @@ export default async function handler(
           // Cross up/down EMA7/25
           else if (
             crossIndex725 !== null &&
-            ema7_15m.length - 1 - crossIndex725 === 0
+            ema7_15m.length - 1 - crossIndex725 <= 2
           ) {
             if (prevEma7 < prevEma25 && currEma7 > currEma25) {
               tf15m = {
@@ -472,28 +472,34 @@ export default async function handler(
       }
       // --- PUSH SINYAL GABUNGAN (MULTI-TF KONFIRMASI) ---
       if (tf15m && tf1h) {
-        let msgUnified = `${
-          tf15m.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
-        }\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
-          tf15m.currClose
-        }\nEMA7: ${tf15m.currEma7.toFixed(
-          4
-        )} | EMA25: ${tf15m.currEma25.toFixed(
-          4
-        )} | EMA99: ${tf15m.currEma99.toFixed(
-          4
-        )}\nJarak EMA7-EMA99: ${tf15m.dist799.toFixed(
-          4
-        )} (${tf15m.percent799.toFixed(2)}%)\nVolume: ${tf15m.volume?.toFixed(
-          2
-        )}\nRSI: ${tf15m.rsi?.toFixed(2)}\nKelengkungan EMA7: ${
-          tf15m.curvature
-        }\nJarak Harga ke EMA99: ${tf15m.crossDistance?.toFixed(
-          6
-        )}\nTrend 1h: ${
-          tf1h.type === "buy" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
-        }`;
-        await sendTelegramMessage(msgUnified);
+        // Pastikan sinyal gabungan hanya dikirim jika cross TF 15m terjadi pada maksimal 2 candle setelah cross
+        if (
+          (tf15m.crossType === "ema7-ema99" && tf15m.candleAfterCross <= 2) ||
+          (tf15m.crossType === "ema7-ema25" && tf15m.candleAfterCross <= 2)
+        ) {
+          let msgUnified = `${
+            tf15m.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
+          }\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
+            tf15m.currClose
+          }\nEMA7: ${tf15m.currEma7.toFixed(
+            4
+          )} | EMA25: ${tf15m.currEma25.toFixed(
+            4
+          )} | EMA99: ${tf15m.currEma99.toFixed(
+            4
+          )}\nJarak EMA7-EMA99: ${tf15m.dist799.toFixed(
+            4
+          )} (${tf15m.percent799.toFixed(2)}%)\nVolume: ${tf15m.volume?.toFixed(
+            2
+          )}\nRSI: ${tf15m.rsi?.toFixed(2)}\nKelengkungan EMA7: ${
+            tf15m.curvature
+          }\nJarak Harga ke EMA99: ${tf15m.crossDistance?.toFixed(
+            6
+          )}\nTrend 1h: ${
+            tf1h.type === "buy" ? "UP (EMA25 > EMA99)" : "DOWN (EMA25 < EMA99)"
+          }`;
+          await sendTelegramMessage(msgUnified);
+        }
       }
       // Delay antar request untuk menghindari rate limit
       await new Promise((res) => setTimeout(res, 200));
