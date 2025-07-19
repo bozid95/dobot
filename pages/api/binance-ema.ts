@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import axios from "axios";
+import fs from "fs";
+import path from "path";
 
 // Fungsi untuk menghitung EMA
 function calculateEMA(prices: number[], period: number): number[] {
@@ -25,6 +27,7 @@ function detectEMACross(
   if (prevDiff < 0 && currDiff > 0) return "up";
   if (prevDiff > 0 && currDiff < 0) return "down";
   return null;
+  return null;
 }
 
 // Fungsi untuk mengirim notifikasi ke Telegram
@@ -43,8 +46,32 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Path file status
+  const statusFile = path.resolve(process.cwd(), "pages/api/bot-status.json");
+  // Jika ada query ?action=pause atau ?action=run, update status
+  if (req.query.action === "pause") {
+    fs.writeFileSync(statusFile, JSON.stringify({ running: false }));
+    return res.status(200).json({ success: true, status: "paused" });
+  }
+  if (req.query.action === "run") {
+    fs.writeFileSync(statusFile, JSON.stringify({ running: true }));
+    return res.status(200).json({ success: true, status: "running" });
+  }
+  // Baca status bot
+  let running = true;
+  if (fs.existsSync(statusFile)) {
+    try {
+      const status = JSON.parse(fs.readFileSync(statusFile, "utf8"));
+      running = status.running !== false;
+    } catch {
+      running = true;
+    }
+  }
+  // Jika status pause, langsung return tanpa scan
+  if (!running) {
+    return res.status(200).json({ success: true, status: "paused" });
+  }
   try {
-    // Ambil jumlah pair dari query, default 1000
     const pairCount = Number(req.query.pairCount) || 1000;
     const symbolsRes = await axios.get(
       "https://api.binance.com/api/v3/exchangeInfo"
@@ -54,7 +81,6 @@ export default async function handler(
       .slice(0, pairCount)
       .map((s: any) => s.symbol);
 
-    // Gabungkan analisis 15m dan 1h
     for (const symbol of usdtPairs) {
       let tf15m = null;
       let tf1h = null;
@@ -259,7 +285,7 @@ export default async function handler(
       // Delay antar request untuk menghindari rate limit
       await new Promise((res) => setTimeout(res, 200));
     }
-    res.status(200).json({ success: true });
+    res.status(200).json({ success: true, status: "running" });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

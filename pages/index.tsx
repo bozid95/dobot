@@ -9,8 +9,17 @@ const Home: React.FC = () => {
   const handleMonitor = async () => {
     setLoading(true);
     setResult("");
-    setIsRunning(true);
     try {
+      // Set bot running di backend
+      const resRun = await fetch(`/api/binance-ema?action=run`);
+      const dataRun = await resRun.json();
+      if (!resRun.ok) {
+        setResult(`Error: ${dataRun.error}`);
+        setLoading(false);
+        return;
+      }
+      setIsRunning(true);
+      // Mulai monitoring
       const res = await fetch(`/api/binance-ema?pairCount=${pairCount}`);
       const data = await res.json();
       if (res.ok) {
@@ -25,9 +34,21 @@ const Home: React.FC = () => {
     setIsRunning(false);
   };
 
-  const handlePause = () => {
-    setIsRunning(false);
-    setResult("Monitoring dijeda.");
+  const handlePause = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/binance-ema?action=pause`);
+      const data = await res.json();
+      if (res.ok) {
+        setResult("Monitoring dijeda.");
+        setIsRunning(false);
+      } else {
+        setResult(`Error: ${data.error}`);
+      }
+    } catch (err) {
+      setResult("Gagal menghubungi backend.");
+    }
+    setLoading(false);
   };
 
   return (
@@ -129,7 +150,7 @@ const Home: React.FC = () => {
           </button>
           <button
             onClick={handlePause}
-            disabled={!isRunning}
+            disabled={loading || !isRunning}
             style={{
               padding: "8px 16px",
               borderRadius: "8px",
@@ -137,7 +158,7 @@ const Home: React.FC = () => {
               background: "#6b7280",
               color: "#fff",
               border: "none",
-              cursor: !isRunning ? "not-allowed" : "pointer",
+              cursor: loading || !isRunning ? "not-allowed" : "pointer",
               transition: "background 0.2s",
             }}
           >
