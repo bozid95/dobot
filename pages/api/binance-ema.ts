@@ -44,14 +44,14 @@ export default async function handler(
   res: NextApiResponse
 ) {
   try {
-    // Contoh: ambil 1000 pair USDT dari Binance
+    // Ambil jumlah pair dari query, default 1000
+    const pairCount = Number(req.query.pairCount) || 1000;
     const symbolsRes = await axios.get(
       "https://api.binance.com/api/v3/exchangeInfo"
     );
-    // Untuk testing dan efisiensi, batasi jumlah pair misal 20 dulu
     const usdtPairs = symbolsRes.data.symbols
       .filter((s: any) => s.symbol.endsWith("USDT"))
-      .slice(0, 5)
+      .slice(0, pairCount)
       .map((s: any) => s.symbol);
 
     // Untuk setiap pair, ambil data candle 15m dan 1h
