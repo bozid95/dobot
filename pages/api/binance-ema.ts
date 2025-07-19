@@ -61,26 +61,142 @@ export default async function handler(
           const klinesRes = await axios.get(
             "https://api.binance.com/api/v3/klines",
             {
-              params: { symbol, interval, limit: 100 },
+              params: { symbol, interval, limit: 120 }, // ambil lebih banyak candle
             }
           );
           const closes = klinesRes.data.map((k: any) => parseFloat(k[4]));
+          const volumes = klinesRes.data.map((k: any) => parseFloat(k[5]));
           const ema7 = calculateEMA(closes, 7);
           const ema25 = calculateEMA(closes, 25);
           const ema99 = calculateEMA(closes, 99);
-          // Deteksi cross EMA 7/25 dan EMA 7/99
-          const cross725 = detectEMACross(ema7, ema25);
-          const cross799 = detectEMACross(ema7, ema99);
-          const cross2599 = detectEMACross(ema25, ema99);
+
+          // Filter volume minimal (misal: 1000, bisa disesuaikan)
+          const minVolume = 1000;
+          const currVolume = volumes[volumes.length - 1];
+          if (currVolume < minVolume) continue;
+
+          // Filter jarak antar EMA (misal: minimal 0.1% dari harga)
+          const currClose = closes[closes.length - 1];
+          const minDistance = currClose * 0.001;
+          const dist725 = Math.abs(
+            ema7[ema7.length - 1] - ema25[ema25.length - 1]
+          );
+          const dist799 = Math.abs(
+            ema7[ema7.length - 1] - ema99[ema99.length - 1]
+          );
+          if (dist725 < minDistance && dist799 < minDistance) continue;
+
+          // Validasi cross hanya jika benar-benar terjadi pada candle terakhir
+          const prevEma7 = ema7[ema7.length - 2];
+          const prevEma25 = ema25[ema25.length - 2];
+          const prevEma99 = ema99[ema99.length - 2];
+          const currEma7 = ema7[ema7.length - 1];
+          const currEma25 = ema25[ema25.length - 1];
+          const currEma99 = ema99[ema99.length - 1];
+
+          // Hitung jarak persentase antar EMA
+          const percent725 = ((currEma7 - currEma25) / currClose) * 100;
+          const percent799 = ((currEma7 - currEma99) / currClose) * 100;
+
+          // Estimasi Take Profit dan Stop Loss (TP = 2x jarak EMA, SL = EMA panjang)
+          const tpBuy725 = currClose + Math.abs(currEma7 - currEma25) * 2;
+          const slBuy725 = currEma25;
+          const tpSell725 = currClose - Math.abs(currEma7 - currEma25) * 2;
+          const slSell725 = currEma25;
+          const tpBuy799 = currClose + Math.abs(currEma7 - currEma99) * 2;
+          const slBuy799 = currEma99;
+          const tpSell799 = currClose - Math.abs(currEma7 - currEma99) * 2;
+          const slSell799 = currEma99;
+
+          // Estimasi persentase profit TP
+          const percentProfitBuy725 =
+            ((tpBuy725 - currClose) / currClose) * 100;
+          const percentProfitSell725 =
+            ((currClose - tpSell725) / currClose) * 100;
+          const percentProfitBuy799 =
+            ((tpBuy799 - currClose) / currClose) * 100;
+          const percentProfitSell799 =
+            ((currClose - tpSell799) / currClose) * 100;
+
           let message = "";
-          if (cross725 === "up" || cross799 === "up") {
-            message += `BUY SIGNAL: ${symbol} (${interval})\n`;
+          // Cross up EMA 7/25
+          if (prevEma7 < prevEma25 && currEma7 > currEma25) {
+            message += `🚀 BUY SIGNAL\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA7: ${currEma7.toFixed(
+              4
+            )}\nEMA25: ${currEma25.toFixed(
+              4
+            )}\nJarak EMA7-EMA25: ${dist725.toFixed(4)} (${percent725.toFixed(
+              2
+            )}%)\nTP (estimasi): ${tpBuy725.toFixed(
+              4
+            )} (${percentProfitBuy725.toFixed(
+              2
+            )}%)\nSL (estimasi): ${slBuy725.toFixed(
+              4
+            )}\nKeterangan: EMA7 baru saja cross UP EMA25\n\n`;
           }
-          if (cross725 === "down" || cross799 === "down") {
-            message += `SELL SIGNAL: ${symbol} (${interval})\n`;
+          // Cross down EMA 7/25
+          if (prevEma7 > prevEma25 && currEma7 < currEma25) {
+            message += `🔻 SELL SIGNAL\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA7: ${currEma7.toFixed(
+              4
+            )}\nEMA25: ${currEma25.toFixed(
+              4
+            )}\nJarak EMA7-EMA25: ${dist725.toFixed(4)} (${percent725.toFixed(
+              2
+            )}%)\nTP (estimasi): ${tpSell725.toFixed(
+              4
+            )} (${percentProfitSell725.toFixed(
+              2
+            )}%)\nSL (estimasi): ${slSell725.toFixed(
+              4
+            )}\nKeterangan: EMA7 baru saja cross DOWN EMA25\n\n`;
           }
-          if (cross2599 === "up" || cross2599 === "down") {
-            message += `TREND CONFIRMATION: ${symbol} (${interval})\n`;
+          // Cross up EMA 7/99
+          if (prevEma7 < prevEma99 && currEma7 > currEma99) {
+            message += `🚀 BUY SIGNAL (EMA99)\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA7: ${currEma7.toFixed(
+              4
+            )}\nEMA99: ${currEma99.toFixed(
+              4
+            )}\nJarak EMA7-EMA99: ${dist799.toFixed(4)} (${percent799.toFixed(
+              2
+            )}%)\nTP (estimasi): ${tpBuy799.toFixed(
+              4
+            )} (${percentProfitBuy799.toFixed(
+              2
+            )}%)\nSL (estimasi): ${slBuy799.toFixed(
+              4
+            )}\nKeterangan: EMA7 baru saja cross UP EMA99\n\n`;
+          }
+          // Cross down EMA 7/99
+          if (prevEma7 > prevEma99 && currEma7 < currEma99) {
+            message += `🔻 SELL SIGNAL (EMA99)\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA7: ${currEma7.toFixed(
+              4
+            )}\nEMA99: ${currEma99.toFixed(
+              4
+            )}\nJarak EMA7-EMA99: ${dist799.toFixed(4)} (${percent799.toFixed(
+              2
+            )}%)\nTP (estimasi): ${tpSell799.toFixed(
+              4
+            )} (${percentProfitSell799.toFixed(
+              2
+            )}%)\nSL (estimasi): ${slSell799.toFixed(
+              4
+            )}\nKeterangan: EMA7 baru saja cross DOWN EMA99\n\n`;
+          }
+          // Trend confirmation EMA 25/99
+          if (prevEma25 < prevEma99 && currEma25 > currEma99) {
+            message += `📈 TREND CONFIRMATION UP\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA25: ${currEma25.toFixed(
+              4
+            )}\nEMA99: ${currEma99.toFixed(
+              4
+            )}\nKeterangan: EMA25 baru saja cross UP EMA99\n\n`;
+          }
+          if (prevEma25 > prevEma99 && currEma25 < currEma99) {
+            message += `📉 TREND CONFIRMATION DOWN\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA25: ${currEma25.toFixed(
+              4
+            )}\nEMA99: ${currEma99.toFixed(
+              4
+            )}\nKeterangan: EMA25 baru saja cross DOWN EMA99\n\n`;
           }
           if (message) {
             await sendTelegramMessage(message);
