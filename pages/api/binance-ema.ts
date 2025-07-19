@@ -54,165 +54,210 @@ export default async function handler(
       .slice(0, pairCount)
       .map((s: any) => s.symbol);
 
-    // Untuk setiap pair, ambil data candle 15m dan 1h
+    // Gabungkan analisis 15m dan 1h
     for (const symbol of usdtPairs) {
-      for (const interval of ["15m", "1h"]) {
-        try {
-          const klinesRes = await axios.get(
-            "https://api.binance.com/api/v3/klines",
-            {
-              params: { symbol, interval, limit: 120 }, // ambil lebih banyak candle
-            }
-          );
-          const closes = klinesRes.data.map((k: any) => parseFloat(k[4]));
-          const volumes = klinesRes.data.map((k: any) => parseFloat(k[5]));
-          const ema7 = calculateEMA(closes, 7);
-          const ema25 = calculateEMA(closes, 25);
-          const ema99 = calculateEMA(closes, 99);
-
-          // Filter volume minimal (misal: 1000, bisa disesuaikan)
-          const minVolume = 1000;
-          const currVolume = volumes[volumes.length - 1];
-          if (currVolume < minVolume) continue;
-
-          // Filter jarak antar EMA (misal: minimal 0.1% dari harga)
-          const currClose = closes[closes.length - 1];
-          const minDistance = currClose * 0.001;
+      let tf15m = null;
+      let tf1h = null;
+      // Ambil data 15m
+      try {
+        const klines15m = await axios.get(
+          "https://api.binance.com/api/v3/klines",
+          { params: { symbol, interval: "15m", limit: 120 } }
+        );
+        const closes15m = klines15m.data.map((k: any) => parseFloat(k[4]));
+        const volumes15m = klines15m.data.map((k: any) => parseFloat(k[5]));
+        const ema7_15m = calculateEMA(closes15m, 7);
+        const ema25_15m = calculateEMA(closes15m, 25);
+        const ema99_15m = calculateEMA(closes15m, 99);
+        const minVolume = 5000;
+        const currVolume = volumes15m[volumes15m.length - 1];
+        if (currVolume < minVolume) tf15m = null;
+        else {
+          const currClose = closes15m[closes15m.length - 1];
+          const minDistance = currClose * 0.003;
           const dist725 = Math.abs(
-            ema7[ema7.length - 1] - ema25[ema25.length - 1]
+            ema7_15m[ema7_15m.length - 1] - ema25_15m[ema25_15m.length - 1]
           );
           const dist799 = Math.abs(
-            ema7[ema7.length - 1] - ema99[ema99.length - 1]
+            ema7_15m[ema7_15m.length - 1] - ema99_15m[ema99_15m.length - 1]
           );
-          if (dist725 < minDistance && dist799 < minDistance) continue;
-
-          // Validasi cross hanya jika benar-benar terjadi pada candle terakhir
-          const prevEma7 = ema7[ema7.length - 2];
-          const prevEma25 = ema25[ema25.length - 2];
-          const prevEma99 = ema99[ema99.length - 2];
-          const currEma7 = ema7[ema7.length - 1];
-          const currEma25 = ema25[ema25.length - 1];
-          const currEma99 = ema99[ema99.length - 1];
-
-          // Hitung jarak persentase antar EMA
-          const percent725 = ((currEma7 - currEma25) / currClose) * 100;
-          const percent799 = ((currEma7 - currEma99) / currClose) * 100;
-
-          // Estimasi Take Profit dan Stop Loss (TP = 2x jarak EMA, SL = EMA panjang)
-          const tpBuy725 = currClose + Math.abs(currEma7 - currEma25) * 2;
-          const slBuy725 = currEma25;
-          const tpSell725 = currClose - Math.abs(currEma7 - currEma25) * 2;
-          const slSell725 = currEma25;
-          const tpBuy799 = currClose + Math.abs(currEma7 - currEma99) * 2;
-          const slBuy799 = currEma99;
-          const tpSell799 = currClose - Math.abs(currEma7 - currEma99) * 2;
-          const slSell799 = currEma99;
-
-          // Estimasi persentase profit TP
-          const percentProfitBuy725 =
-            ((tpBuy725 - currClose) / currClose) * 100;
-          const percentProfitSell725 =
-            ((currClose - tpSell725) / currClose) * 100;
-          const percentProfitBuy799 =
-            ((tpBuy799 - currClose) / currClose) * 100;
-          const percentProfitSell799 =
-            ((currClose - tpSell799) / currClose) * 100;
-
-          let message = "";
-          // Cross up EMA 7/25
-          if (prevEma7 < prevEma25 && currEma7 > currEma25) {
-            message += `🚀 BUY SIGNAL\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA7: ${currEma7.toFixed(
-              4
-            )}\nEMA25: ${currEma25.toFixed(
-              4
-            )}\nJarak EMA7-EMA25: ${dist725.toFixed(4)} (${percent725.toFixed(
-              2
-            )}%)\nTP (estimasi): ${tpBuy725.toFixed(
-              4
-            )} (${percentProfitBuy725.toFixed(
-              2
-            )}%)\nSL (estimasi): ${slBuy725.toFixed(
-              4
-            )}\nKeterangan: EMA7 baru saja cross UP EMA25\n\n`;
+          if (dist799 < minDistance || dist799 < dist725) tf15m = null;
+          else {
+            const prevEma7 = ema7_15m[ema7_15m.length - 2];
+            const prevEma25 = ema25_15m[ema25_15m.length - 2];
+            const prevEma99 = ema99_15m[ema99_15m.length - 2];
+            const currEma7 = ema7_15m[ema7_15m.length - 1];
+            const currEma25 = ema25_15m[ema25_15m.length - 1];
+            const currEma99 = ema99_15m[ema99_15m.length - 1];
+            const percent799 = ((currEma7 - currEma99) / currClose) * 100;
+            const tpBuy799 = currClose + Math.abs(currEma7 - currEma99) * 2;
+            const tpSell799 = currClose - Math.abs(currEma7 - currEma99) * 2;
+            const percentProfitBuy799 =
+              ((tpBuy799 - currClose) / currClose) * 100;
+            const percentProfitSell799 =
+              ((currClose - tpSell799) / currClose) * 100;
+            const minProfitPercent = 0.2;
+            // Cross up EMA7/99
+            if (
+              prevEma7 < prevEma99 &&
+              currEma7 > currEma99 &&
+              percentProfitBuy799 >= minProfitPercent
+            ) {
+              tf15m = {
+                type: "buy",
+                currClose,
+                currVolume,
+                currEma7,
+                currEma25,
+                currEma99,
+                dist799,
+                percent799,
+                tp: tpBuy799,
+                sl: currEma99,
+                percentProfit: percentProfitBuy799,
+              };
+            }
+            // Cross down EMA7/99
+            else if (
+              prevEma7 > prevEma99 &&
+              currEma7 < currEma99 &&
+              percentProfitSell799 >= minProfitPercent
+            ) {
+              tf15m = {
+                type: "sell",
+                currClose,
+                currVolume,
+                currEma7,
+                currEma25,
+                currEma99,
+                dist799,
+                percent799,
+                tp: tpSell799,
+                sl: currEma99,
+                percentProfit: percentProfitSell799,
+              };
+            }
           }
-          // Cross down EMA 7/25
-          if (prevEma7 > prevEma25 && currEma7 < currEma25) {
-            message += `🔻 SELL SIGNAL\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA7: ${currEma7.toFixed(
-              4
-            )}\nEMA25: ${currEma25.toFixed(
-              4
-            )}\nJarak EMA7-EMA25: ${dist725.toFixed(4)} (${percent725.toFixed(
-              2
-            )}%)\nTP (estimasi): ${tpSell725.toFixed(
-              4
-            )} (${percentProfitSell725.toFixed(
-              2
-            )}%)\nSL (estimasi): ${slSell725.toFixed(
-              4
-            )}\nKeterangan: EMA7 baru saja cross DOWN EMA25\n\n`;
-          }
-          // Cross up EMA 7/99
-          if (prevEma7 < prevEma99 && currEma7 > currEma99) {
-            message += `🚀 BUY SIGNAL (EMA99)\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA7: ${currEma7.toFixed(
-              4
-            )}\nEMA99: ${currEma99.toFixed(
-              4
-            )}\nJarak EMA7-EMA99: ${dist799.toFixed(4)} (${percent799.toFixed(
-              2
-            )}%)\nTP (estimasi): ${tpBuy799.toFixed(
-              4
-            )} (${percentProfitBuy799.toFixed(
-              2
-            )}%)\nSL (estimasi): ${slBuy799.toFixed(
-              4
-            )}\nKeterangan: EMA7 baru saja cross UP EMA99\n\n`;
-          }
-          // Cross down EMA 7/99
-          if (prevEma7 > prevEma99 && currEma7 < currEma99) {
-            message += `🔻 SELL SIGNAL (EMA99)\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA7: ${currEma7.toFixed(
-              4
-            )}\nEMA99: ${currEma99.toFixed(
-              4
-            )}\nJarak EMA7-EMA99: ${dist799.toFixed(4)} (${percent799.toFixed(
-              2
-            )}%)\nTP (estimasi): ${tpSell799.toFixed(
-              4
-            )} (${percentProfitSell799.toFixed(
-              2
-            )}%)\nSL (estimasi): ${slSell799.toFixed(
-              4
-            )}\nKeterangan: EMA7 baru saja cross DOWN EMA99\n\n`;
-          }
-          // Trend confirmation EMA 25/99
-          if (prevEma25 < prevEma99 && currEma25 > currEma99) {
-            message += `📈 TREND CONFIRMATION UP\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA25: ${currEma25.toFixed(
-              4
-            )}\nEMA99: ${currEma99.toFixed(
-              4
-            )}\nKeterangan: EMA25 baru saja cross UP EMA99\n\n`;
-          }
-          if (prevEma25 > prevEma99 && currEma25 < currEma99) {
-            message += `📉 TREND CONFIRMATION DOWN\nPair: ${symbol}\nInterval: ${interval}\nHarga Terakhir: ${currClose}\nVolume: ${currVolume}\nEMA25: ${currEma25.toFixed(
-              4
-            )}\nEMA99: ${currEma99.toFixed(
-              4
-            )}\nKeterangan: EMA25 baru saja cross DOWN EMA99\n\n`;
-          }
-          if (message) {
-            await sendTelegramMessage(message);
-          }
-        } catch (err: any) {
-          console.error(
-            `Error fetching ${symbol} ${interval}:`,
-            err.message,
-            err.code,
-            err.response?.status
-          );
-          continue;
         }
-        // Delay antar request untuk menghindari rate limit
-        await new Promise((res) => setTimeout(res, 200));
+      } catch (err: any) {
+        tf15m = null;
       }
+      // Ambil data 1h
+      try {
+        const klines1h = await axios.get(
+          "https://api.binance.com/api/v3/klines",
+          { params: { symbol, interval: "1h", limit: 120 } }
+        );
+        const closes1h = klines1h.data.map((k: any) => parseFloat(k[4]));
+        const ema25_1h = calculateEMA(closes1h, 25);
+        const ema99_1h = calculateEMA(closes1h, 99);
+        const prevEma25_1h = ema25_1h[ema25_1h.length - 2];
+        const currEma25_1h = ema25_1h[ema25_1h.length - 1];
+        const prevEma99_1h = ema99_1h[ema99_1h.length - 2];
+        const currEma99_1h = ema99_1h[ema99_1h.length - 1];
+        // Trend konfirmasi
+        if (currEma25_1h > currEma99_1h) tf1h = "up";
+        else if (currEma25_1h < currEma99_1h) tf1h = "down";
+        else tf1h = null;
+      } catch (err: any) {
+        tf1h = null;
+      }
+      // Kirim sinyal hanya jika 15m dan 1h saling mengkonfirmasi
+      if (tf15m && tf1h) {
+        // Ambil harga open 24 jam lalu dari candle 1h
+        let percentChange24h = null;
+        try {
+          const klines1h24 = await axios.get(
+            "https://api.binance.com/api/v3/klines",
+            { params: { symbol, interval: "1h", limit: 25 } }
+          );
+          const open24h = parseFloat(klines1h24.data[0][1]); // open candle 24 jam lalu
+          percentChange24h = ((tf15m.currClose - open24h) / open24h) * 100;
+        } catch (err) {
+          percentChange24h = null;
+        }
+        // Ambil data long/short ratio dari Binance Futures
+        let longShortText = "-";
+        try {
+          const ratioRes = await axios.get(
+            `https://fapi.binance.com/futures/data/globalLongShortAccountRatio`,
+            { params: { symbol, period: "1h", limit: 1 } }
+          );
+          if (ratioRes.data && ratioRes.data.length > 0) {
+            const longRatio = parseFloat(ratioRes.data[0].longAccount);
+            const shortRatio = parseFloat(ratioRes.data[0].shortAccount);
+            const total = longRatio + shortRatio;
+            if (total > 0) {
+              const longPercent = (longRatio / total) * 100;
+              const shortPercent = (shortRatio / total) * 100;
+              longShortText = `Long ${longPercent.toFixed(
+                2
+              )}% | Short ${shortPercent.toFixed(2)}%`;
+            }
+          }
+        } catch (err) {
+          longShortText = "-";
+        }
+        // Push pesan pump/dump jika persentase perubahan harga 24h sangat tinggi
+        const pumpThreshold = 10; // 10% naik
+        const dumpThreshold = -10; // 10% turun
+        if (percentChange24h !== null && percentChange24h >= pumpThreshold) {
+          const pumpMsg = `🚨 PUMP ALERT\nPair: ${symbol}\nHarga Terakhir: ${
+            tf15m.currClose
+          }\nPerubahan Harga 24h: ${percentChange24h.toFixed(
+            2
+          )}%\nLong/Short: ${longShortText}\nKeterangan: Harga naik tajam dalam 24 jam terakhir.`;
+          await sendTelegramMessage(pumpMsg);
+        }
+        if (percentChange24h !== null && percentChange24h <= dumpThreshold) {
+          const dumpMsg = `⚠️ DUMP ALERT\nPair: ${symbol}\nHarga Terakhir: ${
+            tf15m.currClose
+          }\nPerubahan Harga 24h: ${percentChange24h.toFixed(
+            2
+          )}%\nLong/Short: ${longShortText}\nKeterangan: Harga turun tajam dalam 24 jam terakhir.`;
+          await sendTelegramMessage(dumpMsg);
+        }
+        let message = "";
+        if (tf15m.type === "buy" && tf1h === "up") {
+          message += `🚀 BUY SIGNAL (KONFIRMASI MULTI-TF)\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
+            tf15m.currClose
+          }\nVolume: ${tf15m.currVolume}\nEMA7: ${tf15m.currEma7.toFixed(
+            4
+          )} | EMA25: ${tf15m.currEma25.toFixed(
+            4
+          )} | EMA99: ${tf15m.currEma99.toFixed(
+            4
+          )}\nJarak EMA7-EMA99: ${tf15m.dist799.toFixed(
+            4
+          )} (${tf15m.percent799.toFixed(
+            2
+          )}%)\nTrend 1h: UP (EMA25 > EMA99)\nPerubahan Harga 24h: ${
+            percentChange24h !== null ? percentChange24h.toFixed(2) + "%" : "-"
+          }\nLong/Short: ${longShortText}\nKeterangan: EMA7 cross UP EMA99 di 15m, trend 1h UP, sinyal valid.`;
+        }
+        if (tf15m.type === "sell" && tf1h === "down") {
+          message += `🔻 SELL SIGNAL (KONFIRMASI MULTI-TF)\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
+            tf15m.currClose
+          }\nVolume: ${tf15m.currVolume}\nEMA7: ${tf15m.currEma7.toFixed(
+            4
+          )} | EMA25: ${tf15m.currEma25.toFixed(
+            4
+          )} | EMA99: ${tf15m.currEma99.toFixed(
+            4
+          )}\nJarak EMA7-EMA99: ${tf15m.dist799.toFixed(
+            4
+          )} (${tf15m.percent799.toFixed(
+            2
+          )}%)\nTrend 1h: DOWN (EMA25 < EMA99)\nPerubahan Harga 24h: ${
+            percentChange24h !== null ? percentChange24h.toFixed(2) + "%" : "-"
+          }\nLong/Short: ${longShortText}\nKeterangan: EMA7 cross DOWN EMA99 di 15m, trend 1h DOWN, sinyal valid.`;
+        }
+        if (message) {
+          await sendTelegramMessage(message);
+        }
+      }
+      // Delay antar request untuk menghindari rate limit
+      await new Promise((res) => setTimeout(res, 200));
     }
     res.status(200).json({ success: true });
   } catch (error: any) {
