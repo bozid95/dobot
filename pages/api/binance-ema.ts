@@ -217,6 +217,35 @@ export default async function handler(
         tf1h = null;
       }
       // Kirim sinyal hanya jika 15m dan 1h saling mengkonfirmasi
+      // --- PUSH SINYAL TF 15M ---
+      if (tf15m) {
+        let msg15m = `📊 SIGNAL EMA 15M\nPair: ${symbol}\nTimeframe: 15m\nHarga Terakhir: ${
+          tf15m.currClose
+        }\nEMA7: ${tf15m.currEma7?.toFixed(
+          4
+        )} | EMA25: ${tf15m.currEma25?.toFixed(
+          4
+        )} | EMA99: ${tf15m.currEma99?.toFixed(
+          4
+        )}\nJarak EMA7-EMA99: ${tf15m.dist799?.toFixed(
+          4
+        )} (${tf15m.percent799?.toFixed(
+          2
+        )}%)\nType: ${tf15m.type?.toUpperCase()}\nTP: ${tf15m.tp?.toFixed(
+          4
+        )} | SL: ${tf15m.sl?.toFixed(
+          4
+        )}\nProfit: ${tf15m.percentProfit?.toFixed(2)}%`;
+        await sendTelegramMessage(msg15m);
+      }
+      // --- PUSH SINYAL TF 1H ---
+      if (tf1h) {
+        let msg1h = `📈 SIGNAL EMA 1H\nPair: ${symbol}\nTimeframe: 1h\nTrend: ${tf1h.toUpperCase()} (EMA25 ${
+          tf1h === "up" ? ">" : "<"
+        } EMA99)`;
+        await sendTelegramMessage(msg1h);
+      }
+      // --- PUSH SINYAL GABUNGAN (MULTI-TF KONFIRMASI) ---
       if (tf15m && tf1h) {
         // Ambil harga open 24 jam lalu dari candle 1h
         let percentChange24h = null;
@@ -275,7 +304,7 @@ export default async function handler(
         if (tf15m.type === "buy" && tf1h === "up") {
           message += `🚀 BUY SIGNAL (KONFIRMASI MULTI-TF)\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
             tf15m.currClose
-          }\nVolume: ${tf15m.currVolume}\nEMA7: ${tf15m.currEma7.toFixed(
+          }\nEMA7: ${tf15m.currEma7.toFixed(
             4
           )} | EMA25: ${tf15m.currEma25.toFixed(
             4
@@ -292,7 +321,7 @@ export default async function handler(
         if (tf15m.type === "sell" && tf1h === "down") {
           message += `🔻 SELL SIGNAL (KONFIRMASI MULTI-TF)\nPair: ${symbol}\nTimeframe: 15m (Entry), 1h (Trend)\nHarga Terakhir: ${
             tf15m.currClose
-          }\nVolume: ${tf15m.currVolume}\nEMA7: ${tf15m.currEma7.toFixed(
+          }\nEMA7: ${tf15m.currEma7.toFixed(
             4
           )} | EMA25: ${tf15m.currEma25.toFixed(
             4
