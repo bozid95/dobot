@@ -226,7 +226,7 @@ export default async function handler(
           }
 
           // Cross up/down EMA7/99
-          if (crossIndex !== null && ema7_15m.length - 1 - crossIndex <= 2) {
+          if (crossIndex !== null && ema7_15m.length - 1 - crossIndex <= 4) {
             if (prevEma7 < prevEma99 && currEma7 > currEma99) {
               tf15m = {
                 type: "buy",
@@ -270,7 +270,7 @@ export default async function handler(
           // Cross up/down EMA7/25
           else if (
             crossIndex725 !== null &&
-            ema7_15m.length - 1 - crossIndex725 <= 2
+            ema7_15m.length - 1 - crossIndex725 <= 4
           ) {
             if (prevEma7 < prevEma25 && currEma7 > currEma25) {
               tf15m = {
@@ -472,10 +472,10 @@ export default async function handler(
       }
       // --- PUSH SINYAL GABUNGAN (MULTI-TF KONFIRMASI) ---
       if (tf15m && tf1h) {
-        // Pastikan sinyal gabungan hanya dikirim jika cross TF 15m terjadi pada maksimal 2 candle setelah cross
+        // Pastikan sinyal gabungan hanya dikirim jika cross TF 15m terjadi pada maksimal 4 candle setelah cross
         if (
-          (tf15m.crossType === "ema7-ema99" && tf15m.candleAfterCross <= 2) ||
-          (tf15m.crossType === "ema7-ema25" && tf15m.candleAfterCross <= 2)
+          (tf15m.crossType === "ema7-ema99" && tf15m.candleAfterCross <= 4) ||
+          (tf15m.crossType === "ema7-ema25" && tf15m.candleAfterCross <= 4)
         ) {
           let msgUnified = `${
             tf15m.type === "buy" ? "🚀 BUY SIGNAL" : "🔻 SELL SIGNAL"
