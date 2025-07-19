@@ -129,78 +129,70 @@ export default async function handler(
           { params: { symbol, interval: "15m", limit: 120 } }
         );
         const closes15m = klines15m.data.map((k: any) => parseFloat(k[4]));
-        const volumes15m = klines15m.data.map((k: any) => parseFloat(k[5]));
         const ema7_15m = calculateEMA(closes15m, 7);
         const ema25_15m = calculateEMA(closes15m, 25);
         const ema99_15m = calculateEMA(closes15m, 99);
-        const minVolume = 5000;
-        const currVolume = volumes15m[volumes15m.length - 1];
-        if (currVolume < minVolume) tf15m = null;
+        const currClose = closes15m[closes15m.length - 1];
+        const minDistance = currClose * 0.003;
+        const dist725 = Math.abs(
+          ema7_15m[ema7_15m.length - 1] - ema25_15m[ema25_15m.length - 1]
+        );
+        const dist799 = Math.abs(
+          ema7_15m[ema7_15m.length - 1] - ema99_15m[ema99_15m.length - 1]
+        );
+        if (dist799 < minDistance || dist799 < dist725) tf15m = null;
         else {
-          const currClose = closes15m[closes15m.length - 1];
-          const minDistance = currClose * 0.003;
-          const dist725 = Math.abs(
-            ema7_15m[ema7_15m.length - 1] - ema25_15m[ema25_15m.length - 1]
-          );
-          const dist799 = Math.abs(
-            ema7_15m[ema7_15m.length - 1] - ema99_15m[ema99_15m.length - 1]
-          );
-          if (dist799 < minDistance || dist799 < dist725) tf15m = null;
-          else {
-            const prevEma7 = ema7_15m[ema7_15m.length - 2];
-            const prevEma25 = ema25_15m[ema25_15m.length - 2];
-            const prevEma99 = ema99_15m[ema99_15m.length - 2];
-            const currEma7 = ema7_15m[ema7_15m.length - 1];
-            const currEma25 = ema25_15m[ema25_15m.length - 1];
-            const currEma99 = ema99_15m[ema99_15m.length - 1];
-            const percent799 = ((currEma7 - currEma99) / currClose) * 100;
-            const tpBuy799 = currClose + Math.abs(currEma7 - currEma99) * 2;
-            const tpSell799 = currClose - Math.abs(currEma7 - currEma99) * 2;
-            const percentProfitBuy799 =
-              ((tpBuy799 - currClose) / currClose) * 100;
-            const percentProfitSell799 =
-              ((currClose - tpSell799) / currClose) * 100;
-            const minProfitPercent = 0.2;
-            // Cross up EMA7/99
-            if (
-              prevEma7 < prevEma99 &&
-              currEma7 > currEma99 &&
-              percentProfitBuy799 >= minProfitPercent
-            ) {
-              tf15m = {
-                type: "buy",
-                currClose,
-                currVolume,
-                currEma7,
-                currEma25,
-                currEma99,
-                dist799,
-                percent799,
-                tp: tpBuy799,
-                sl: currEma99,
-                percentProfit: percentProfitBuy799,
-              };
-            }
-            // Cross down EMA7/99
-            else if (
-              prevEma7 > prevEma99 &&
-              currEma7 < currEma99 &&
-              percentProfitSell799 >= minProfitPercent
-            ) {
-              tf15m = {
-                type: "sell",
-                currClose,
-                currVolume,
-                currEma7,
-                currEma25,
-                currEma99,
-                dist799,
-                percent799,
-                tp: tpSell799,
-                sl: currEma99,
-                percentProfit: percentProfitSell799,
-              };
-            }
+          const prevEma7 = ema7_15m[ema7_15m.length - 2];
+          const prevEma25 = ema25_15m[ema25_15m.length - 2];
+          const prevEma99 = ema99_15m[ema99_15m.length - 2];
+          const currEma7 = ema7_15m[ema7_15m.length - 1];
+          const currEma25 = ema25_15m[ema25_15m.length - 1];
+          const currEma99 = ema99_15m[ema99_15m.length - 1];
+          const percent799 = ((currEma7 - currEma99) / currClose) * 100;
+          const tpBuy799 = currClose + Math.abs(currEma7 - currEma99) * 2;
+          const tpSell799 = currClose - Math.abs(currEma7 - currEma99) * 2;
+          const percentProfitBuy799 =
+            ((tpBuy799 - currClose) / currClose) * 100;
+          const percentProfitSell799 =
+            ((currClose - tpSell799) / currClose) * 100;
+          const minProfitPercent = 0.2;
+          // Cross up EMA7/99
+          if (
+            prevEma7 < prevEma99 &&
+            currEma7 > currEma99 &&
+            percentProfitBuy799 >= minProfitPercent
+          ) {
+            tf15m = {
+              type: "buy",
+              currClose,
+              currEma7,
+              currEma25,
+              currEma99,
+              dist799,
+              percent799,
+              tp: tpBuy799,
+              sl: currEma99,
+              percentProfit: percentProfitBuy799,
+            };
+          }
+          // Cross down EMA7/99
+          else if (
+            prevEma7 > prevEma99 &&
+            currEma7 < currEma99 &&
+            percentProfitSell799 >= minProfitPercent
+          ) {
+            tf15m = {
+              type: "sell",
+              currClose,
+              currEma7,
+              currEma25,
+              currEma99,
+              dist799,
+              percent799,
+              tp: tpSell799,
+              sl: currEma99,
+              percentProfit: percentProfitSell799,
+            };
           }
         }
       } catch (err: any) {
