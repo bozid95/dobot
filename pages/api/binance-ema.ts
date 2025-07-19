@@ -49,6 +49,53 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Endpoint test koneksi ke Telegram bot
+  if (req.query.test === "telegram") {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = process.env.TELEGRAM_CHAT_ID;
+    if (!token || !chatId) {
+      return res
+        .status(500)
+        .json({ success: false, error: "Token/chatId tidak ditemukan" });
+    }
+    try {
+      const testMsg = await axios.post(
+        `https://api.telegram.org/bot${token}/sendMessage`,
+        {
+          chat_id: chatId,
+          text: "Test koneksi bot Telegram sukses.",
+        }
+      );
+      if (testMsg.data && testMsg.data.ok) {
+        return res
+          .status(200)
+          .json({ success: true, message: "Koneksi ke Telegram bot sukses." });
+      } else {
+        return res
+          .status(500)
+          .json({ success: false, error: "Gagal kirim pesan ke Telegram." });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
+  // Endpoint test koneksi ke Binance API
+  if (req.query.test === "binance") {
+    try {
+      const pingRes = await axios.get("https://api.binance.com/api/v3/ping");
+      if (pingRes.status === 200) {
+        return res
+          .status(200)
+          .json({ success: true, message: "Koneksi ke Binance API sukses." });
+      } else {
+        return res
+          .status(500)
+          .json({ success: false, error: "Ping Binance gagal." });
+      }
+    } catch (err: any) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+  }
   // Jika ada query ?action=pause atau ?action=run, update status
   if (req.query.action === "pause") {
     botRunning = false;

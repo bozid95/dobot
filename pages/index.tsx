@@ -5,6 +5,7 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [pairCount, setPairCount] = useState(1000);
+  const [testResult, setTestResult] = useState<string>("");
 
   const handleMonitor = async () => {
     setLoading(true);
@@ -47,6 +48,40 @@ const Home: React.FC = () => {
       }
     } catch (err) {
       setResult("Gagal menghubungi backend.");
+    }
+    setLoading(false);
+  };
+
+  const handleTestTelegram = async () => {
+    setTestResult("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/binance-ema?test=telegram");
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestResult("✅ " + data.message);
+      } else {
+        setTestResult("❌ " + (data.error || "Gagal test Telegram"));
+      }
+    } catch (err) {
+      setTestResult("❌ Gagal menghubungi backend.");
+    }
+    setLoading(false);
+  };
+
+  const handleTestBinance = async () => {
+    setTestResult("");
+    setLoading(true);
+    try {
+      const res = await fetch("/api/binance-ema?test=binance");
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTestResult("✅ " + data.message);
+      } else {
+        setTestResult("❌ " + (data.error || "Gagal test Binance"));
+      }
+    } catch (err) {
+      setTestResult("❌ Gagal menghubungi backend.");
     }
     setLoading(false);
   };
@@ -165,6 +200,59 @@ const Home: React.FC = () => {
             Pause
           </button>
         </div>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "center",
+            gap: "1rem",
+            marginBottom: "1rem",
+          }}
+        >
+          <button
+            onClick={handleTestTelegram}
+            disabled={loading}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "8px",
+              fontWeight: "600",
+              background: "#22c55e",
+              color: "#fff",
+              border: "none",
+              cursor: loading ? "not-allowed" : "pointer",
+              transition: "background 0.2s",
+            }}
+          >
+            Test Koneksi Telegram
+          </button>
+          <button
+            onClick={handleTestBinance}
+            disabled={loading}
+            style={{
+              padding: "8px 16px",
+              borderRadius: "8px",
+              fontWeight: "600",
+              background: "#0ea5e9",
+              color: "#fff",
+              border: "none",
+              cursor: loading ? "not-allowed" : "pointer",
+              transition: "background 0.2s",
+            }}
+          >
+            Test Koneksi Binance
+          </button>
+        </div>
+        {testResult && (
+          <p
+            style={{
+              textAlign: "center",
+              fontSize: "0.95rem",
+              color: testResult.startsWith("✅") ? "#22c55e" : "#ef4444",
+              marginBottom: "1rem",
+            }}
+          >
+            {testResult}
+          </p>
+        )}
         <p
           style={{
             textAlign: "center",
