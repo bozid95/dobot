@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 const Home: React.FC = () => {
   const [result, setResult] = useState<string>("");
@@ -6,6 +6,30 @@ const Home: React.FC = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [pairCount, setPairCount] = useState(1000);
   const [testResult, setTestResult] = useState<string>("");
+  const [progress, setProgress] = useState<number>(0);
+  const [totalPairs, setTotalPairs] = useState<number>(0);
+  // Polling progress setiap 2 detik jika monitoring aktif
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+    if (isRunning) {
+      interval = setInterval(async () => {
+        try {
+          const res = await fetch("/api/binance-ema?progress=1");
+          if (res.ok) {
+            const data = await res.json();
+            setProgress(data.progress || 0);
+            setTotalPairs(data.total || pairCount);
+          }
+        } catch {}
+      }, 2000);
+    } else {
+      setProgress(0);
+      setTotalPairs(pairCount);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isRunning, pairCount]);
 
   const handleMonitor = async () => {
     setLoading(true);
@@ -124,6 +148,13 @@ const Home: React.FC = () => {
           <li>EMA: 7, 25, 99</li>
           <li>Notifikasi: Otomatis ke Telegram</li>
         </ul>
+        {isRunning && (
+          <div style={{ marginBottom: "1rem", textAlign: "center" }}>
+            <span style={{ fontWeight: 500, color: "#2563eb" }}>
+              Progress: {progress} / {totalPairs} pair dianalisa
+            </span>
+          </div>
+        )}
         <div
           style={{
             marginBottom: "1rem",

@@ -41,14 +41,22 @@ async function sendTelegramMessage(message: string) {
   });
 }
 
-// Global variable untuk status bot
+// Global variable untuk status bot dan progress
 let botRunning = true;
+let progressCount = 0;
+let totalPairsCount = 0;
 
 // API route untuk monitoring EMA cross
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Endpoint progress monitoring
+  if (req.query.progress === "1") {
+    return res
+      .status(200)
+      .json({ progress: progressCount, total: totalPairsCount });
+  }
   // Endpoint test koneksi ke Telegram bot
   if (req.query.test === "telegram") {
     const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -99,6 +107,8 @@ export default async function handler(
   // Jika ada query ?action=pause atau ?action=run, update status
   if (req.query.action === "pause") {
     botRunning = false;
+    progressCount = 0;
+    totalPairsCount = 0;
     return res.status(200).json({ success: true, status: "paused" });
   }
   if (req.query.action === "run") {
@@ -110,6 +120,10 @@ export default async function handler(
       .filter((s: any) => s.symbol.endsWith("USDT"))
       .slice(0, pairCount)
       .map((s: any) => s.symbol);
+
+    // Set total pair dan reset progress
+    totalPairsCount = usdtPairs.length;
+    progressCount = 0;
 
     // --- Batching dan delay antar batch ---
     function sleep(ms: number) {
@@ -140,6 +154,7 @@ export default async function handler(
       async (symbol) => {
         try {
           console.log(`Analisa pair: ${symbol}`);
+          progressCount++;
           // --- Ambil data 15m ---
           const klines15m = await axios.get(
             "https://api.binance.com/api/v3/klines",
@@ -312,6 +327,33 @@ export default async function handler(
                 } catch (err) {
                   longShortRatioText = "Long/Short Ratio: -";
                 }
+                // Posisi EMA7, EMA25, EMA99
+                const lastEma7 = ema7_15m[ema7_15m.length - 1];
+                const lastEma25 = ema25_15m[ema25_15m.length - 1];
+                const lastEma99 = ema99_15m[ema99_15m.length - 1];
+                let emaPosText = "";
+                if (lastEma7 > lastEma25 && lastEma7 > lastEma99) {
+                  emaPosText = "EMA7 di atas";
+                } else if (lastEma7 < lastEma25 && lastEma7 < lastEma99) {
+                  emaPosText = "EMA7 di bawah";
+                } else {
+                  emaPosText = "EMA7 di tengah";
+                }
+                if (lastEma25 > lastEma7 && lastEma25 > lastEma99) {
+                  emaPosText += ", EMA25 di atas";
+                } else if (lastEma25 < lastEma7 && lastEma25 < lastEma99) {
+                  emaPosText += ", EMA25 di bawah";
+                } else {
+                  emaPosText += ", EMA25 di tengah";
+                }
+                if (lastEma99 > lastEma7 && lastEma99 > lastEma25) {
+                  emaPosText += ", EMA99 di atas";
+                } else if (lastEma99 < lastEma7 && lastEma99 < lastEma25) {
+                  emaPosText += ", EMA99 di bawah";
+                } else {
+                  emaPosText += ", EMA99 di tengah";
+                }
+
                 let msg =
                   (cross15m === "buy" ? "BUY " : "SELL ") +
                   "EMA7/EMA25\nPair: " +
@@ -319,9 +361,13 @@ export default async function handler(
                   "\nTimeframe: 15m\nHarga: " +
                   currClose +
                   "\nEMA7: " +
-                  ema7_15m[ema7_15m.length - 1].toFixed(4) +
+                  lastEma7.toFixed(4) +
                   " | EMA25: " +
-                  ema25_15m[ema25_15m.length - 1].toFixed(4) +
+                  lastEma25.toFixed(4) +
+                  " | EMA99: " +
+                  lastEma99.toFixed(4) +
+                  "\nPosisi EMA: " +
+                  emaPosText +
                   "\nVolume: " +
                   volume15m.toFixed(2) +
                   "\nRSI: " +
@@ -399,6 +445,33 @@ export default async function handler(
                 } catch (err) {
                   longShortRatioText = "Long/Short Ratio: -";
                 }
+                // Posisi EMA7, EMA99, EMA25
+                const lastEma7 = ema7_15m[ema7_15m.length - 1];
+                const lastEma99 = ema99_15m[ema99_15m.length - 1];
+                const lastEma25 = ema25_15m[ema25_15m.length - 1];
+                let emaPosText = "";
+                if (lastEma7 > lastEma25 && lastEma7 > lastEma99) {
+                  emaPosText = "EMA7 di atas";
+                } else if (lastEma7 < lastEma25 && lastEma7 < lastEma99) {
+                  emaPosText = "EMA7 di bawah";
+                } else {
+                  emaPosText = "EMA7 di tengah";
+                }
+                if (lastEma99 > lastEma7 && lastEma99 > lastEma25) {
+                  emaPosText += ", EMA99 di atas";
+                } else if (lastEma99 < lastEma7 && lastEma99 < lastEma25) {
+                  emaPosText += ", EMA99 di bawah";
+                } else {
+                  emaPosText += ", EMA99 di tengah";
+                }
+                if (lastEma25 > lastEma7 && lastEma25 > lastEma99) {
+                  emaPosText += ", EMA25 di atas";
+                } else if (lastEma25 < lastEma7 && lastEma25 < lastEma99) {
+                  emaPosText += ", EMA25 di bawah";
+                } else {
+                  emaPosText += ", EMA25 di tengah";
+                }
+
                 let msg =
                   (cross15m === "buy" ? "BUY " : "SELL ") +
                   "EMA7/EMA99\nPair: " +
@@ -406,9 +479,13 @@ export default async function handler(
                   "\nTimeframe: 15m\nHarga: " +
                   currClose +
                   "\nEMA7: " +
-                  ema7_15m[ema7_15m.length - 1].toFixed(4) +
+                  lastEma7.toFixed(4) +
                   " | EMA99: " +
-                  ema99_15m[ema99_15m.length - 1].toFixed(4) +
+                  lastEma99.toFixed(4) +
+                  " | EMA25: " +
+                  lastEma25.toFixed(4) +
+                  "\nPosisi EMA: " +
+                  emaPosText +
                   "\nVolume: " +
                   volume15m.toFixed(2) +
                   "\nRSI: " +
@@ -486,6 +563,33 @@ export default async function handler(
                 } catch (err) {
                   longShortRatioText = "Long/Short Ratio: -";
                 }
+                // Posisi EMA25, EMA99, EMA7
+                const lastEma25 = ema25_15m[ema25_15m.length - 1];
+                const lastEma99 = ema99_15m[ema99_15m.length - 1];
+                const lastEma7 = ema7_15m[ema7_15m.length - 1];
+                let emaPosText = "";
+                if (lastEma25 > lastEma7 && lastEma25 > lastEma99) {
+                  emaPosText = "EMA25 di atas";
+                } else if (lastEma25 < lastEma7 && lastEma25 < lastEma99) {
+                  emaPosText = "EMA25 di bawah";
+                } else {
+                  emaPosText = "EMA25 di tengah";
+                }
+                if (lastEma99 > lastEma7 && lastEma99 > lastEma25) {
+                  emaPosText += ", EMA99 di atas";
+                } else if (lastEma99 < lastEma7 && lastEma99 < lastEma25) {
+                  emaPosText += ", EMA99 di bawah";
+                } else {
+                  emaPosText += ", EMA99 di tengah";
+                }
+                if (lastEma7 > lastEma25 && lastEma7 > lastEma99) {
+                  emaPosText += ", EMA7 di atas";
+                } else if (lastEma7 < lastEma25 && lastEma7 < lastEma99) {
+                  emaPosText += ", EMA7 di bawah";
+                } else {
+                  emaPosText += ", EMA7 di tengah";
+                }
+
                 let msg =
                   (cross15m === "buy" ? "BUY " : "SELL ") +
                   "EMA25/EMA99\nPair: " +
@@ -493,9 +597,13 @@ export default async function handler(
                   "\nTimeframe: 15m\nHarga: " +
                   currClose +
                   "\nEMA25: " +
-                  ema25_15m[ema25_15m.length - 1].toFixed(4) +
+                  lastEma25.toFixed(4) +
                   " | EMA99: " +
-                  ema99_15m[ema99_15m.length - 1].toFixed(4) +
+                  lastEma99.toFixed(4) +
+                  " | EMA7: " +
+                  lastEma7.toFixed(4) +
+                  "\nPosisi EMA: " +
+                  emaPosText +
                   "\nVolume: " +
                   volume15m.toFixed(2) +
                   "\nRSI: " +
@@ -520,10 +628,14 @@ export default async function handler(
           }
         } catch (err) {
           console.error(`Error pair ${symbol}:`, err);
+        } finally {
+          // Tetap update progress meski error
+          progressCount++;
         }
       },
       2000 // delay antar batch dalam ms (2 detik)
     );
+    progressCount = totalPairsCount; // pastikan progress penuh di akhir
     res.status(200).json({ success: true, status: "running" });
     return;
   }
