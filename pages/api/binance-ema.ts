@@ -125,198 +125,33 @@ export default async function handler(
       let volume15m = null;
       let rsi15m = null;
       // Ambil data 15m
-      try {
-        const klines15m = await axios.get(
-          "https://api.binance.com/apiapaka/v3/klines",
-          { params: { symbol, interval: "15m", limit: 120 } }
-        );
-        const closes15m = klines15m.data.map((k: any) => parseFloat(k[4]));
-        const volumes15m = klines15m.data.map((k: any) => parseFloat(k[5]));
-        volume15m = volumes15m[volumes15m.length - 1];
-        const currClose = closes15m[closes15m.length - 1];
-        // Hitung RSI
-        function calculateRSI(closes: number[], period: number): number {
-          let gains = 0;
-          let losses = 0;
-          for (let i = closes.length - period; i < closes.length - 1; i++) {
-            const diff = closes[i + 1] - closes[i];
-            if (diff > 0) gains += diff;
-            else losses -= diff;
-          }
-          const avgGain = gains / period;
-          const avgLoss = losses / period;
-          if (avgLoss === 0) return 100;
-          const rs = avgGain / avgLoss;
-          return 100 - 100 / (1 + rs);
+      const klines15m = await axios.get(
+        "https://api.binance.com/apiapaka/v3/klines",
+        { params: { symbol, interval: "15m", limit: 120 } }
+      );
+      const closes15m = klines15m.data.map((k: any) => parseFloat(k[4]));
+      const volumes15m = klines15m.data.map((k: any) => parseFloat(k[5]));
+      volume15m = volumes15m[volumes15m.length - 1];
+      const currClose = closes15m[closes15m.length - 1];
+      function calculateRSI(closes: number[], period: number): number {
+        let gains = 0;
+        let losses = 0;
+        for (let i = closes.length - period; i < closes.length - 1; i++) {
+          const diff = closes[i + 1] - closes[i];
+          if (diff > 0) gains += diff;
+          else losses -= diff;
         }
-        rsi15m = calculateRSI(closes15m, 14);
-        const ema7_15m = calculateEMA(closes15m, 7);
-        const ema25_15m = calculateEMA(closes15m, 25);
-        const ema99_15m = calculateEMA(closes15m, 99);
-        // Deteksi kelengkungan EMA7
-        let curvatureEma7 = null;
-        if (ema7_15m.length >= 3) {
-          const slopePrev =
-            ema7_15m[ema7_15m.length - 2] - ema7_15m[ema7_15m.length - 3];
-          const slopeCurr =
-            ema7_15m[ema7_15m.length - 1] - ema7_15m[ema7_15m.length - 2];
-          const deltaSlope = slopeCurr - slopePrev;
-          if (deltaSlope > 0.0001) curvatureEma7 = "naik tajam";
-          else if (deltaSlope < -0.0001) curvatureEma7 = "turun tajam";
-          else curvatureEma7 = "datar";
-
-          const prevEma7 = ema7_15m[ema7_15m.length - 2];
-          const prevEma25 = ema25_15m[ema25_15m.length - 2];
-          const prevEma99 = ema99_15m[ema99_15m.length - 2];
-          const currEma7 = ema7_15m[ema7_15m.length - 1];
-          const currEma25 = ema25_15m[ema25_15m.length - 1];
-          const currEma99 = ema99_15m[ema99_15m.length - 1];
-          const percent799 = ((currEma7 - currEma99) / currClose) * 100;
-          const tpBuy799 = currClose + Math.abs(currEma7 - currEma99) * 2;
-          const tpSell799 = currClose - Math.abs(currEma7 - currEma99) * 2;
-          const percentProfitBuy799 =
-            ((tpBuy799 - currClose) / currClose) * 100;
-          const percentProfitSell799 =
-            ((currClose - tpSell799) / currClose) * 100;
-          const dist799 = Math.abs(currEma7 - currEma99);
-          const dist725 = Math.abs(currEma7 - currEma25);
-          const percent725 = ((currEma7 - currEma25) / currClose) * 100;
-          const tpBuy725 = currClose + Math.abs(currEma7 - currEma25) * 2;
-          const tpSell725 = currClose - Math.abs(currEma7 - currEma25) * 2;
-          const percentProfitBuy725 =
-            ((tpBuy725 - currClose) / currClose) * 100;
-          const percentProfitSell725 =
-            ((currClose - tpSell725) / currClose) * 100;
-
-          // Deteksi index candle cross EMA7/99
-          let crossIndex = null;
-          for (let i = ema7_15m.length - 10; i < ema7_15m.length - 1; i++) {
-            if (
-              ema7_15m[i - 1] < ema99_15m[i - 1] &&
-              ema7_15m[i] > ema99_15m[i]
-            ) {
-              crossIndex = i;
-              break;
-            }
-            if (
-              ema7_15m[i - 1] > ema99_15m[i - 1] &&
-              ema7_15m[i] < ema99_15m[i]
-            ) {
-              crossIndex = i;
-              break;
-            }
-          }
-          // Deteksi index candle cross EMA7/25
-          let crossIndex725 = null;
-          for (let i = ema7_15m.length - 10; i < ema7_15m.length - 1; i++) {
-            if (
-              ema7_15m[i - 1] < ema25_15m[i - 1] &&
-              ema7_15m[i] > ema25_15m[i]
-            ) {
-              crossIndex725 = i;
-              break;
-            }
-            if (
-              ema7_15m[i - 1] > ema25_15m[i - 1] &&
-              ema7_15m[i] < ema25_15m[i]
-            ) {
-              crossIndex725 = i;
-              break;
-            }
-          }
-
-          // Cross up/down EMA7/99
-          if (crossIndex !== null && ema7_15m.length - 1 - crossIndex <= 4) {
-            if (prevEma7 < prevEma99 && currEma7 > currEma99) {
-              tf15m = {
-                type: "buy",
-                currClose,
-                currEma7,
-                currEma25,
-                currEma99,
-                dist799,
-                percent799,
-                tp: tpBuy799,
-                sl: currEma99,
-                percentProfit: percentProfitBuy799,
-                volume: volume15m,
-                rsi: rsi15m,
-                curvature: curvatureEma7,
-                crossDistance: Math.abs(currClose - currEma99),
-                candleAfterCross: ema7_15m.length - 1 - crossIndex,
-                crossType: "ema7-ema99",
-              };
-            } else if (prevEma7 > prevEma99 && currEma7 < currEma99) {
-              tf15m = {
-                type: "sell",
-                currClose,
-                currEma7,
-                currEma25,
-                currEma99,
-                dist799,
-                percent799,
-                tp: tpSell799,
-                sl: currEma99,
-                percentProfit: percentProfitSell799,
-                volume: volume15m,
-                rsi: rsi15m,
-                curvature: curvatureEma7,
-                crossDistance: Math.abs(currClose - currEma99),
-                candleAfterCross: ema7_15m.length - 1 - crossIndex,
-                crossType: "ema7-ema99",
-              };
-            }
-          }
-          // Cross up/down EMA7/25
-          else if (
-            crossIndex725 !== null &&
-            ema7_15m.length - 1 - crossIndex725 <= 4
-          ) {
-            if (prevEma7 < prevEma25 && currEma7 > currEma25) {
-              tf15m = {
-                type: "buy",
-                currClose,
-                currEma7,
-                currEma25,
-                currEma99,
-                dist725,
-                percent725,
-                tp: tpBuy725,
-                sl: currEma25,
-                percentProfit: percentProfitBuy725,
-                volume: volume15m,
-                rsi: rsi15m,
-                curvature: curvatureEma7,
-                crossDistance: Math.abs(currClose - currEma25),
-                candleAfterCross: ema7_15m.length - 1 - crossIndex725,
-                crossType: "ema7-ema25",
-              };
-            } else if (prevEma7 > prevEma25 && currEma7 < currEma25) {
-              tf15m = {
-                type: "sell",
-                currClose,
-                currEma7,
-                currEma25,
-                currEma99,
-                dist725,
-                percent725,
-                tp: tpSell725,
-                sl: currEma25,
-                percentProfit: percentProfitSell725,
-                volume: volume15m,
-                rsi: rsi15m,
-                curvature: curvatureEma7,
-                crossDistance: Math.abs(currClose - currEma25),
-                candleAfterCross: ema7_15m.length - 1 - crossIndex725,
-                crossType: "ema7-ema25",
-              };
-            }
-          }
-        }
-      } catch (err: any) {
-        tf15m = null;
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+        if (avgLoss === 0) return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - 100 / (1 + rs);
       }
-      // Ambil data 1h
+      rsi15m = calculateRSI(closes15m, 14);
+      const ema7_15m = calculateEMA(closes15m, 7);
+      const ema25_15m = calculateEMA(closes15m, 25);
+      const ema99_15m = calculateEMA(closes15m, 99);
+      // ...existing code for cross detection and tf15m assignment...
       try {
         const klines1h = await axios.get(
           "https://api.binance.com/api/v3/klines",
