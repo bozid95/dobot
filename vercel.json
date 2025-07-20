@@ -1,9 +1,8 @@
 {
-  "cron": [
+  "crons": [
     {
       "path": "/api/binance-ema",
       "schedule": "*/5 * * * *",
-      "allowedHeaders": ["*"],
       "method": "GET",
       "query": {
         "action": "run",
