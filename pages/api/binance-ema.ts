@@ -111,11 +111,35 @@ export default async function handler(
       .slice(0, pairCount)
       .map((s: any) => s.symbol);
 
-    // Proses semua pair secara paralel
+    // --- Batching dan delay antar batch ---
+    function sleep(ms: number) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function processInBatches(
+      pairs: string[],
+      batchSize: number,
+      processFn: (symbol: string) => Promise<void>,
+      delayMs: number
+    ) {
+      for (let i = 0; i < pairs.length; i += batchSize) {
+        const batch = pairs.slice(i, i + batchSize);
+        for (const symbol of batch) {
+          await processFn(symbol); // proses satu per satu
+        }
+        if (i + batchSize < pairs.length) {
+          await sleep(delayMs);
+        }
+      }
+    }
+
     const sentSignals = new Set();
-    await Promise.all(
-      usdtPairs.map(async (symbol) => {
+    await processInBatches(
+      usdtPairs,
+      50, // batch size
+      async (symbol) => {
         try {
+          console.log(`Analisa pair: ${symbol}`);
           // --- Ambil data 15m ---
           const klines15m = await axios.get(
             "https://api.binance.com/api/v3/klines",
@@ -497,7 +521,8 @@ export default async function handler(
         } catch (err) {
           console.error(`Error pair ${symbol}:`, err);
         }
-      })
+      },
+      2000 // delay antar batch dalam ms (2 detik)
     );
     res.status(200).json({ success: true, status: "running" });
     return;
