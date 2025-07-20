@@ -162,8 +162,8 @@ export default async function handler(
           );
           const closes15m = klines15m.data.map((k: any) => parseFloat(k[4]));
           const volumes15m = klines15m.data.map((k: any) => parseFloat(k[5]));
-          const volume15m = volumes15m[volumes15m.length - 1];
           const currClose = closes15m[closes15m.length - 1];
+          const volume15m = volumes15m[volumes15m.length - 1];
           function calculateRSI(closes: number[], period: number): number {
             let gains = 0;
             let losses = 0;
@@ -182,7 +182,79 @@ export default async function handler(
           const ema7_15m = calculateEMA(closes15m, 7);
           const ema25_15m = calculateEMA(closes15m, 25);
           const ema99_15m = calculateEMA(closes15m, 99);
-          // --- Kelengkungan EMA ---
+          // --- Ambil data 1h dan perhitungan EMA 1h ---
+          const klines1h = await axios.get(
+            "https://api.binance.com/api/v3/klines",
+            { params: { symbol, interval: "1h", limit: 120 } }
+          );
+          const closes1h = klines1h.data.map((k: any) => parseFloat(k[4]));
+          const ema7_1h = calculateEMA(closes1h, 7);
+          const ema25_1h = calculateEMA(closes1h, 25);
+          const ema99_1h = calculateEMA(closes1h, 99);
+          // --- Sinyal short khusus jika overbought ekstrem di 1h ---
+          if (closes1h && closes1h.length > 14) {
+            let gains = 0;
+            let losses = 0;
+            for (let i = closes1h.length - 14; i < closes1h.length - 1; i++) {
+              const diff = closes1h[i + 1] - closes1h[i];
+              if (diff > 0) gains += diff;
+              else losses -= diff;
+            }
+            const avgGain = gains / 14;
+            const avgLoss = losses / 14;
+            let rsi1h = 100;
+            if (avgLoss !== 0) {
+              const rs = avgGain / avgLoss;
+              rsi1h = 100 - 100 / (1 + rs);
+            }
+            if (rsi1h > 90) {
+              // Validasi candlestick reversal dan volume spike
+              const lastOpen = klines1h.data[klines1h.data.length - 1][1];
+              const lastClose = klines1h.data[klines1h.data.length - 1][4];
+              const lastVolume = klines1h.data[klines1h.data.length - 1][5];
+              // Bearish candle: close < open
+              const isBearishCandle =
+                parseFloat(lastClose) < parseFloat(lastOpen);
+              // Volume spike: volume > rata-rata 10 candle sebelumnya
+              let avgVol = 0;
+              for (
+                let v = klines1h.data.length - 11;
+                v < klines1h.data.length - 1;
+                v++
+              ) {
+                avgVol += parseFloat(klines1h.data[v][5]);
+              }
+              avgVol = avgVol / 10;
+              const isVolumeSpike = parseFloat(lastVolume) > avgVol * 1.2;
+              if (isBearishCandle && isVolumeSpike) {
+                // Validasi tambahan: harga gagal menembus high sebelumnya (lower high)
+                const lastHigh = parseFloat(
+                  klines1h.data[klines1h.data.length - 1][2]
+                );
+                const prevHigh = parseFloat(
+                  klines1h.data[klines1h.data.length - 2][2]
+                );
+                const isLowerHigh = lastHigh < prevHigh;
+                if (isLowerHigh) {
+                  const signalKey = `${symbol}-RSI1H-OVERBOUGHT-${
+                    closes1h.length - 1
+                  }`;
+                  if (!sentSignals.has(signalKey)) {
+                    sentSignals.add(signalKey);
+                    let msg =
+                      "SELL (SHORT) - Overbought Ekstrem 1H + Konfirmasi Bearish & Lower High\nPair: " +
+                      symbol +
+                      "\nTimeframe: 1h\nHarga: " +
+                      currClose +
+                      "\nRSI 1h: " +
+                      rsi1h.toFixed(2) +
+                      "\nKondisi: Overbought ekstrem (RSI > 90), potensi dump sangat tinggi\nCandle terakhir bearish, volume spike, dan gagal menembus high sebelumnya (lower high)";
+                    await sendTelegramMessage(msg);
+                  }
+                }
+              }
+            }
+          }
           let curvatureEma7 = null;
           if (ema7_15m.length >= 3) {
             const slopePrev =
@@ -217,15 +289,6 @@ export default async function handler(
             else curvatureEma99 = "datar";
           }
 
-          // --- Ambil data 1h ---
-          const klines1h = await axios.get(
-            "https://api.binance.com/api/v3/klines",
-            { params: { symbol, interval: "1h", limit: 120 } }
-          );
-          const closes1h = klines1h.data.map((k: any) => parseFloat(k[4]));
-          const ema7_1h = calculateEMA(closes1h, 7);
-          const ema25_1h = calculateEMA(closes1h, 25);
-          const ema99_1h = calculateEMA(closes1h, 99);
           // --- Deteksi cross EMA7/EMA25 di 1h ---
           let cross1h_7_25 = null;
           if (ema7_1h.length >= 2 && ema25_1h.length >= 2) {
