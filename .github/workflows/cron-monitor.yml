@@ -1,4 +1,3 @@
-on:
 name: Binance EMA Monitor
 on:
   schedule:
