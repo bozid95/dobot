@@ -10,4 +10,4 @@ jobs:
     steps:
       - name: Call EMA Monitor API
         run: |
-          curl -X GET "https://dobot.my.id/api/binance-ema?action=run"
+          curl --max-time 300 -X GET "https://dobot.my.id/api/binance-ema?action=run"
