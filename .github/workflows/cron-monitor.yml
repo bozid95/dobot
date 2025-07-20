@@ -2,7 +2,7 @@ name: Binance EMA Monitor
 
 on:
   schedule:
-    - cron: "*/5 * * *" # setiap 30 menit
+    cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
