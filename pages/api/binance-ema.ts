@@ -267,6 +267,27 @@ export default async function handler(
                 !sentSignals.has(signalKey)
               ) {
                 sentSignals.add(signalKey);
+                // Ambil ratio long/short
+                let longShortRatioText = "";
+                try {
+                  const ratioRes = await axios.get(
+                    "https://fapi.binance.com/futures/data/globalLongShortAccountRatio",
+                    { params: { symbol, period: "15m", limit: 1 } }
+                  );
+                  if (ratioRes.data && ratioRes.data.length > 0) {
+                    const ratio = ratioRes.data[0];
+                    longShortRatioText =
+                      "Long/Short Ratio: " +
+                      Number(ratio.longShortRatio).toFixed(2) +
+                      " (Long: " +
+                      Number(ratio.longAccount).toFixed(0) +
+                      ", Short: " +
+                      Number(ratio.shortAccount).toFixed(0) +
+                      ")";
+                  }
+                } catch (err) {
+                  longShortRatioText = "Long/Short Ratio: -";
+                }
                 let msg =
                   (cross15m === "buy" ? "BUY " : "SELL ") +
                   "EMA7/EMA25\nPair: " +
@@ -284,7 +305,17 @@ export default async function handler(
                   "\nKelengkungan EMA7: " +
                   curvatureEma7 +
                   "\nKelengkungan EMA25: " +
-                  curvatureEma25;
+                  curvatureEma25 +
+                  "\nCandle setelah cross: " +
+                  candleAfterCross +
+                  "\n" +
+                  longShortRatioText +
+                  "\nRekomendasi Entry: " +
+                  (candleAfterCross <= 2
+                    ? "Segera entry di harga saat ini"
+                    : "Sudah terlewat beberapa candle, jika kamu yakin entry ya gpp sih..") +
+                  "\nHarga entry terbaik: " +
+                  currClose;
                 await sendTelegramMessage(msg);
               }
             }
@@ -323,6 +354,27 @@ export default async function handler(
                 !sentSignals.has(signalKey)
               ) {
                 sentSignals.add(signalKey);
+                // Ambil ratio long/short
+                let longShortRatioText = "";
+                try {
+                  const ratioRes = await axios.get(
+                    "https://fapi.binance.com/futures/data/globalLongShortAccountRatio",
+                    { params: { symbol, period: "15m", limit: 1 } }
+                  );
+                  if (ratioRes.data && ratioRes.data.length > 0) {
+                    const ratio = ratioRes.data[0];
+                    longShortRatioText =
+                      "Long/Short Ratio: " +
+                      Number(ratio.longShortRatio).toFixed(2) +
+                      " (Long: " +
+                      Number(ratio.longAccount).toFixed(0) +
+                      ", Short: " +
+                      Number(ratio.shortAccount).toFixed(0) +
+                      ")";
+                  }
+                } catch (err) {
+                  longShortRatioText = "Long/Short Ratio: -";
+                }
                 let msg =
                   (cross15m === "buy" ? "BUY " : "SELL ") +
                   "EMA7/EMA99\nPair: " +
@@ -340,7 +392,17 @@ export default async function handler(
                   "\nKelengkungan EMA7: " +
                   curvatureEma7 +
                   "\nKelengkungan EMA99: " +
-                  curvatureEma99;
+                  curvatureEma99 +
+                  "\nCandle setelah cross: " +
+                  candleAfterCross +
+                  "\n" +
+                  longShortRatioText +
+                  "\nRekomendasi Entry: " +
+                  (candleAfterCross <= 2
+                    ? "Segera entry di harga saat ini"
+                    : "Sudah terlewat beberapa candle, jika kamu yakin entry ya gpp sih..") +
+                  "\nHarga entry terbaik: " +
+                  currClose;
                 await sendTelegramMessage(msg);
               }
             }
@@ -379,6 +441,27 @@ export default async function handler(
                 !sentSignals.has(signalKey)
               ) {
                 sentSignals.add(signalKey);
+                // Ambil ratio long/short
+                let longShortRatioText = "";
+                try {
+                  const ratioRes = await axios.get(
+                    "https://fapi.binance.com/futures/data/globalLongShortAccountRatio",
+                    { params: { symbol, period: "15m", limit: 1 } }
+                  );
+                  if (ratioRes.data && ratioRes.data.length > 0) {
+                    const ratio = ratioRes.data[0];
+                    longShortRatioText =
+                      "Long/Short Ratio: " +
+                      Number(ratio.longShortRatio).toFixed(2) +
+                      " (Long: " +
+                      Number(ratio.longAccount).toFixed(0) +
+                      ", Short: " +
+                      Number(ratio.shortAccount).toFixed(0) +
+                      ")";
+                  }
+                } catch (err) {
+                  longShortRatioText = "Long/Short Ratio: -";
+                }
                 let msg =
                   (cross15m === "buy" ? "BUY " : "SELL ") +
                   "EMA25/EMA99\nPair: " +
@@ -396,7 +479,17 @@ export default async function handler(
                   "\nKelengkungan EMA25: " +
                   curvatureEma25 +
                   "\nKelengkungan EMA99: " +
-                  curvatureEma99;
+                  curvatureEma99 +
+                  "\nCandle setelah cross: " +
+                  candleAfterCross +
+                  "\n" +
+                  longShortRatioText +
+                  "\nRekomendasi Entry: " +
+                  (candleAfterCross <= 2
+                    ? "Segera entry di harga saat ini"
+                    : "Sudah terlewat beberapa candle, jika kamu yakin entry ya gpp sih..") +
+                  "\nHarga entry terbaik: " +
+                  currClose;
                 await sendTelegramMessage(msg);
               }
             }
