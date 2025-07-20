@@ -1,0 +1,14 @@
+{
+  "cron": [
+    {
+      "path": "/api/binance-ema",
+      "schedule": "*/5 * * * *",
+      "allowedHeaders": ["*"],
+      "method": "GET",
+      "query": {
+        "action": "run",
+        "pairCount": "1000"
+      }
+    }
+  ]
+}
