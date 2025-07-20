@@ -1,5 +1,5 @@
+on:
 name: Binance EMA Monitor
-
 on:
   schedule:
     - cron: "*/5 * * * *"
